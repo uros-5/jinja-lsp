@@ -1,5 +1,7 @@
-pub mod chumsky;
-pub mod completion;
-pub mod jump_definition;
-pub mod reference;
-pub mod semantic_token;
+pub mod capturer;
+pub mod config;
+pub mod lsp_files;
+pub mod parsers;
+pub mod queries;
+pub mod query_helper;
+pub mod server;

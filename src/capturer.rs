@@ -89,7 +89,7 @@ impl Capturer for JinjaCapturer2 {
         let value = self.value(capture, source);
 
         if key == "temp_expression" || key == "temp_statement" {
-            self.block = String::from(value);
+            self.block = value;
         } else if key == "key_id" && !self.block.contains(&format!(".{value}")) {
             if value.parse::<u32>().is_ok() {
                 return;
@@ -99,7 +99,7 @@ impl Capturer for JinjaCapturer2 {
                     self.cnt += 1;
                     format!("{}_{}", key, self.cnt)
                 } else {
-                    format!("{}", key)
+                    key.to_string()
                 }
             };
             acc.insert(
@@ -160,10 +160,7 @@ impl Capturer for RustCapturer {
 }
 
 #[derive(Default)]
-pub struct JinjaCompletionCapturer {
-    pipe_waiting: bool,
-    ident_waiting: bool,
-}
+pub struct JinjaCompletionCapturer;
 
 impl Capturer for JinjaCompletionCapturer {
     fn save_by(
@@ -175,14 +172,6 @@ impl Capturer for JinjaCompletionCapturer {
     ) {
         let key = capture_names[capture.index as usize].to_owned();
         let value = self.value(capture, source);
-        if key == "pipe_waiting" {
-            self.pipe_waiting = true;
-            self.ident_waiting = false;
-        } else if key == "ident_waiting" {
-            self.pipe_waiting = false;
-            self.ident_waiting = true;
-        }
-
         acc.insert(
             key.to_string(),
             CaptureDetails {

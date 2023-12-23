@@ -7,6 +7,7 @@ use crate::{
     queries::{JINJA_COMPLETION, JINJA_DEF, JINJA_REF, RUST_DEF},
 };
 
+#[derive(Debug)]
 pub struct Queries {
     pub jinja_ident_query: Query,
     pub jinja_ref_query: Query,
@@ -55,35 +56,36 @@ pub fn query_completion(
     root: Node<'_>,
     source: &str,
     trigger_point: Point,
-    query_type: QueryType,
     query: &Queries,
 ) -> Option<CompletionType> {
     let closest_node = root.descendant_for_point_range(trigger_point, trigger_point)?;
     let element = find_element_referent_to_current_node(closest_node)?;
-    let pipe = query_pipe(root, source, trigger_point, query_type, query);
+    let capturer = JinjaCompletionCapturer::default();
+    let props = query_props(
+        element,
+        source,
+        trigger_point,
+        &query.jinja_completion_query,
+        false,
+        capturer,
+    );
+    let pipe = query_pipe(trigger_point, &props);
     if pipe.is_some() {
         return pipe;
     }
-    let ident = query_ident(root, source, trigger_point, query_type, query);
+    let ident = query_ident(trigger_point, &props);
     if ident.is_some() {
         return ident;
     }
 
-    query_expr(root, source, trigger_point, query_type, query)
+    query_expr(trigger_point, &props)
 }
 
 pub fn query_pipe(
-    root: Node<'_>,
-    source: &str,
     trigger_point: Point,
-    query_type: QueryType,
-    query: &Queries,
+    props: &HashMap<String, CaptureDetails>,
 ) -> Option<CompletionType> {
-    //
-    let mut capturer = JinjaCompletionCapturer::default();
-    let query = &query.jinja_completion_query;
-    let props = query_props(root, source, trigger_point, query, false, capturer);
-    let pipe_waiting = props.get("pipe_waiting")?;
+    props.get("pipe_waiting")?;
     let pipe = props.get("pipe")?;
     if trigger_point >= pipe.start_position && trigger_point <= pipe.end_position {
         Some(CompletionType::Pipe)
@@ -93,16 +95,10 @@ pub fn query_pipe(
 }
 
 pub fn query_ident(
-    root: Node<'_>,
-    source: &str,
     trigger_point: Point,
-    query_type: QueryType,
-    query: &Queries,
+    props: &HashMap<String, CaptureDetails>,
 ) -> Option<CompletionType> {
     //
-    let mut capturer = JinjaCompletionCapturer::default();
-    let query = &query.jinja_completion_query;
-    let props = query_props(root, source, trigger_point, query, false, capturer);
     let ident_waiting = props.get("ident_waiting")?;
     let keyword = props.get("key_name")?;
     if trigger_point > keyword.end_position && trigger_point <= ident_waiting.end_position {
@@ -124,15 +120,9 @@ pub fn query_ident(
 }
 
 pub fn query_expr(
-    root: Node<'_>,
-    source: &str,
     trigger_point: Point,
-    query_type: QueryType,
-    query: &Queries,
+    props: &HashMap<String, CaptureDetails>,
 ) -> Option<CompletionType> {
-    let capturer = JinjaCompletionCapturer::default();
-    let query = &query.jinja_completion_query;
-    let props = query_props(root, source, trigger_point, query, false, capturer);
     props.get("empty_expression")?;
     let start = props.get("start")?;
     let end = props.get("end")?;
@@ -181,11 +171,11 @@ mod tests1 {
     use tree_sitter::{Parser, Point};
 
     use crate::{
-        capturer::{JinjaCapturer, JinjaCapturer2, JinjaCompletionCapturer, RustCapturer},
+        capturer::{JinjaCapturer, JinjaCapturer2, RustCapturer},
         query_helper::{query_props, CompletionType, Queries},
     };
 
-    use super::{query_completion, QueryType};
+    use super::query_completion;
 
     fn prepare_jinja_tree(text: &str) -> tree_sitter::Tree {
         let language = tree_sitter_jinja2::language();
@@ -231,7 +221,7 @@ mod tests1 {
         let tree = prepare_jinja_tree(case);
         let trigger_point = Point::new(0, 0);
         let closest_node = tree.root_node();
-        let mut query = Queries::default();
+        let query = Queries::default();
         let query = &query.jinja_ident_query;
         let capturer = JinjaCapturer::default();
         let props = query_props(closest_node, case, trigger_point, query, true, capturer);
@@ -303,39 +293,33 @@ mod tests1 {
     #[test]
     fn find_jinja_completion() {
         let source = r#"
-{{ something |     filter1 | filter2 }}
+            {{ something |     filter1 | filter2 }}
 
-{% if something == 11 -%}
-{% macro example(a, b, c) -%}
-<p> hello world</p>
-{%- endmacro %}
+            {% if something == 11 -%}
+            {% macro example(a, b, c) -%}
+            <p> hello world</p>
+            {%- endmacro %}
 
-{{ }}
-{{ "|" }}
+            {{ }}
+            {{ "|" }}
         "#;
         let cases = [
-            (Point::new(1, 17), Some(CompletionType::Pipe)),
-            (Point::new(1, 26), None),
-            (Point::new(1, 29), Some(CompletionType::Pipe)),
-            (Point::new(1, 38), None),
-            (Point::new(3, 6), Some(CompletionType::Identifier)),
-            (Point::new(4, 9), None),
-            (Point::new(3, 9), None),
-            (Point::new(8, 4), Some(CompletionType::Identifier)),
-            (Point::new(9, 7), None),
+            (Point::new(1, 27), Some(CompletionType::Pipe)),
+            (Point::new(1, 48), None),
+            (Point::new(1, 40), Some(CompletionType::Pipe)),
+            (Point::new(1, 50), None),
+            (Point::new(3, 18), Some(CompletionType::Identifier)),
+            (Point::new(4, 20), None),
+            (Point::new(3, 22), None),
+            (Point::new(8, 15), Some(CompletionType::Identifier)),
+            (Point::new(9, 18), None),
         ];
         for case in cases {
             let tree = prepare_jinja_tree(source);
             let trigger_point = case.0;
             let closest_node = tree.root_node();
             let query = Queries::default();
-            let compl = query_completion(
-                closest_node,
-                source,
-                trigger_point,
-                QueryType::Completion,
-                &query,
-            );
+            let compl = query_completion(closest_node, source, trigger_point, &query);
             assert_eq!(compl, case.1);
         }
     }

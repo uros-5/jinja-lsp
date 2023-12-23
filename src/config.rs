@@ -1,9 +1,18 @@
-use std::{ffi::OsStr, path::Path};
+use std::{
+    ffi::OsStr,
+    fs::read_to_string,
+    path::Path,
+    sync::{Arc, Mutex, MutexGuard, RwLock},
+};
 
 use anyhow::Error;
+use dashmap::DashMap;
+use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use walkdir::WalkDir;
+
+use crate::{lsp_files::LspFiles, query_helper::Queries};
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
@@ -35,18 +44,36 @@ pub fn config_exist(config: Option<Value>) -> Option<JinjaConfig> {
     None
 }
 
-pub fn read_config(config: &JinjaConfig) -> anyhow::Result<()> {
-    if config.templates.is_empty() {
-        return Err(Error::msg("Template directory not found"));
-    }
-    if !is_backend(&config.lang) {
-        Err(Error::msg("Backend language not supported"))
+pub fn read_config(
+    config: &RwLock<Option<JinjaConfig>>,
+    lsp_files: &Arc<Mutex<LspFiles>>,
+    queries: &Arc<Mutex<Queries>>,
+    document_map: &DashMap<String, Rope>,
+) -> anyhow::Result<()> {
+    if let Ok(config) = config.read() {
+        if let Some(config) = config.as_ref() {
+            if config.templates.is_empty() {
+                return Err(Error::msg("Template directory not found"));
+            }
+            if !is_backend(&config.lang) {
+                Err(Error::msg("Backend language not supported"))
+            } else {
+                walkdir(config, lsp_files, queries, document_map)
+            }
+        } else {
+            Err(Error::msg("Config doesn't exist"))
+        }
     } else {
-        walkdir(config)
+        Err(Error::msg("Config doesn't exist"))
     }
 }
 
-fn walkdir(config: &JinjaConfig) -> anyhow::Result<()> {
+fn walkdir(
+    config: &JinjaConfig,
+    lsp_files: &Arc<Mutex<LspFiles>>,
+    queries: &Arc<Mutex<Queries>>,
+    document_map: &DashMap<String, Rope>,
+) -> anyhow::Result<()> {
     let templates = WalkDir::new(&config.templates);
     for (index, entry) in templates.into_iter().enumerate() {
         let entry = entry?;
@@ -55,6 +82,14 @@ fn walkdir(config: &JinjaConfig) -> anyhow::Result<()> {
             let path = &entry.path();
             let ext = config.file_ext(path);
             if let Some(ext) = ext {
+                let _ = lsp_files.lock().is_ok_and(|lsp_files| {
+                    lsp_files.read_files(path, ext, queries, document_map);
+                    true
+                });
+                // let _ = queries.lock().is_ok_and(|queries| {
+                //     add_file(path, &lsp_files, lang_type, &queries, false, document_map);
+                //     true
+                // });
                 // match ext {
                 //     LangType::Template => todo!(),
                 //     LangType::Backend => todo!(),
@@ -73,7 +108,29 @@ fn is_backend(lang: &str) -> bool {
     lang == "rust"
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+fn add_file(
+    path: &&Path,
+    lsp_files: &MutexGuard<LspFiles>,
+    lang_type: LangType,
+    queries: &Queries,
+    _skip: bool,
+    document_map: &DashMap<String, Rope>,
+) -> Option<()> {
+    if let Ok(name) = std::fs::canonicalize(path) {
+        let name = name.to_str()?;
+        let file = lsp_files.add_file(format!("file://{}", name))?;
+        let _ = read_to_string(name).is_ok_and(|content| {
+            let rope = ropey::Rope::from_str(&content);
+            document_map.insert(format!("file://{}", name).to_string(), rope);
+            lsp_files.add_tree(file, lang_type, &content, None);
+            // let _ = lsp_files.add_tags_from_file(file, lang_type, &content, false, queries, diags);
+            true
+        });
+    }
+    None
+}
+
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum LangType {
     Template,
     Backend,

@@ -1,9 +1,12 @@
-use std::sync::RwLock;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, RwLock};
 use std::{result::Result as StdResult, sync::RwLockWriteGuard};
 
+use dashmap::mapref::one::RefMut;
 use tower_lsp::lsp_types::{
-    CodeActionProviderCapability, CompletionOptions, HoverProviderCapability, InitializedParams,
-    OneOf, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    CodeActionProviderCapability, CompletionOptions, CompletionOptionsCompletionItem,
+    DidChangeTextDocumentParams, HoverProviderCapability, InitializedParams, OneOf, Range,
+    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
 };
 use tower_lsp::{
@@ -16,13 +19,19 @@ use dashmap::DashMap;
 use ropey::Rope;
 
 use crate::config::{config_exist, read_config, JinjaConfig};
+use crate::filters::init_filter_completions;
+use crate::lsp_files::LspFiles;
+use crate::query_helper::Queries;
+use crate::to_input_edit::ToInputEdit;
 
-#[derive(Debug)]
 pub struct Backend {
     client: Client,
     document_map: DashMap<String, Rope>,
     can_complete: RwLock<bool>,
     config: RwLock<Option<JinjaConfig>>,
+    filter_values: HashMap<String, String>,
+    pub lsp_files: Arc<Mutex<LspFiles>>,
+    pub queries: Arc<Mutex<Queries>>,
 }
 
 #[tower_lsp::async_trait]
@@ -96,11 +105,52 @@ impl LanguageServer for Backend {
             .log_message(MessageType::INFO, "initialized!")
             .await;
 
-        if let Ok(config) = self.config.read() {
-            if let Some(config) = config.as_ref() {
-                let c = read_config(config);
+        match read_config(
+            &self.config,
+            &self.lsp_files,
+            &self.queries,
+            &self.document_map,
+        ) {
+            Ok(d) => {}
+            Err(err) => {
+                let _ = self.config.write().is_ok_and(|mut config| {
+                    *config = None;
+                    true
+                });
+                let msg = err.to_string();
+                self.client.log_message(MessageType::INFO, msg).await;
             }
         }
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let uri = &params.text_document.uri.to_string();
+        let rope = self.document_map.get_mut(uri);
+        if let Some(mut rope) = rope {
+            for change in params.content_changes {
+                if let Some(range) = &change.range {
+                    let input_edit = range.to_input_edit(&rope);
+                    if change.text.is_empty() {
+                        self.on_remove(range, &mut rope);
+                    } else {
+                        self.on_insert(range, &change.text, &mut rope);
+                    }
+                    let mut w = LocalWriter::default();
+                    let _ = rope.write_to(&mut w);
+                    let _ = self.lsp_files.lock().is_ok_and(|lsp_files| {
+                        lsp_files.input_edit(uri, w.content, input_edit);
+                        true
+                    });
+                }
+            }
+        }
+        // if let Some(text) = params.content_changes.first_mut() {
+        // self.on_change(ServerTextDocumentItem {
+        //     uri: params.text_document.uri,
+        //     text: std::mem::take(&mut text.text),
+        // })
+        // .await
+        // }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -113,11 +163,52 @@ impl Backend {
         let document_map = DashMap::new();
         let can_complete = RwLock::new(false);
         let config = RwLock::new(None);
+        let filter_values = init_filter_completions();
+        let lsp_files = Arc::new(Mutex::new(LspFiles::default()));
+        let queries = Arc::new(Mutex::new(Queries::default()));
         Self {
             client,
             document_map,
             can_complete,
             config,
+            filter_values,
+            lsp_files,
+            queries,
         }
+    }
+
+    fn on_remove(&self, range: &Range, rope: &mut RefMut<'_, String, Rope>) -> Option<()> {
+        let (start, end) = range.to_byte(rope);
+        rope.remove(start..end);
+        None
+    }
+
+    fn on_insert(
+        &self,
+        range: &Range,
+        text: &str,
+        rope: &mut RefMut<'_, String, Rope>,
+    ) -> Option<()> {
+        let (start, _) = range.to_byte(rope);
+        rope.insert(start, text);
+        None
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct LocalWriter {
+    pub content: String,
+}
+
+impl std::io::Write for LocalWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if let Ok(b) = std::str::from_utf8(buf) {
+            self.content.push_str(b);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }

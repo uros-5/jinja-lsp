@@ -88,10 +88,6 @@ pub fn init_filter_completions() -> HashMap<String, String> {
         include_str!("./md/filters/abs.md").to_string(),
     );
     hm.insert(
-        "some2".to_string(),
-        include_str!("./md/filters/some2.sh").to_string(),
-    );
-    hm.insert(
         "indent".to_string(),
         include_str!("./md/filters/indent.md").to_string(),
     );
@@ -148,24 +144,12 @@ pub fn init_filter_completions() -> HashMap<String, String> {
         include_str!("./md/filters/bool.md").to_string(),
     );
     hm.insert(
-        "some3".to_string(),
-        include_str!("./md/filters/some3.sh").to_string(),
-    );
-    hm.insert(
-        "some".to_string(),
-        include_str!("./md/filters/some.sh").to_string(),
-    );
-    hm.insert(
         "capitalize".to_string(),
         include_str!("./md/filters/capitalize.md").to_string(),
     );
     hm.insert(
         "list".to_string(),
         include_str!("./md/filters/list.md").to_string(),
-    );
-    hm.insert(
-        "some4".to_string(),
-        include_str!("./md/filters/some4.sh").to_string(),
     );
     hm.insert(
         "dictsort".to_string(),

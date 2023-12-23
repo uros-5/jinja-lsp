@@ -8,9 +8,14 @@ use std::{
 
 use dashmap::{mapref::one::RefMut, DashMap};
 use ropey::Rope;
+use tower_lsp::lsp_types::Position;
 use tree_sitter::{InputEdit, Point, Range, Tree};
 
-use crate::{config::LangType, parsers::Parsers, query_helper::Queries};
+use crate::{
+    config::LangType,
+    parsers::Parsers,
+    query_helper::{query_completion, CompletionType, Queries, QueryType},
+};
 
 #[derive(Clone)]
 pub struct LspFiles {
@@ -117,10 +122,17 @@ impl LspFiles {
         None
     }
 
-    pub fn input_edit(&self, file: &String, code: String, input_edit: InputEdit) -> Option<()> {
+    pub fn input_edit(
+        &self,
+        file: &String,
+        code: String,
+        input_edit: InputEdit,
+        lang_type: Option<LangType>,
+    ) -> Option<()> {
+        let lang_type = lang_type?;
         let file = self.get_index(file)?;
         let _ = self.parsers.lock().is_ok_and(|parsers| {
-            self.edit_old_tree(file, LangType::Template, input_edit, parsers, code);
+            self.edit_old_tree(file, lang_type, input_edit, parsers, code);
             true
         });
 
@@ -143,6 +155,21 @@ impl LspFiles {
         let trees = self.trees.get_mut(&lang_type)?;
         trees.insert(index, new_tree);
         None
+    }
+
+    pub fn query_completion(
+        &self,
+        index: usize,
+        text: &str,
+        query_type: QueryType,
+        pos: Position,
+        query: &Queries,
+    ) -> Option<CompletionType> {
+        let trees = self.trees.get(&LangType::Template)?;
+        let old_tree = trees.get(&index)?;
+        let root_node = old_tree.root_node();
+        let trigger_point = Point::new(pos.line as usize, pos.character as usize);
+        query_completion(root_node, text, trigger_point, &query)
     }
 }
 

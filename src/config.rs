@@ -24,7 +24,7 @@ pub struct JinjaConfig {
 }
 
 impl JinjaConfig {
-    fn file_ext(&self, path: &&Path) -> Option<LangType> {
+    pub fn file_ext(&self, path: &&Path) -> Option<LangType> {
         match path.extension()?.to_str() {
             Some(e) => match e {
                 "html" | "jinja" | "j2" => Some(LangType::Template),

@@ -1,12 +1,15 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use std::{result::Result as StdResult, sync::RwLockWriteGuard};
 
 use dashmap::mapref::one::RefMut;
 use tower_lsp::lsp_types::{
-    CodeActionProviderCapability, CompletionOptions, CompletionOptionsCompletionItem,
-    DidChangeTextDocumentParams, HoverProviderCapability, InitializedParams, OneOf, Range,
-    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    CodeActionProviderCapability, CompletionContext, CompletionItem, CompletionItemKind,
+    CompletionOptions, CompletionOptionsCompletionItem, CompletionParams, CompletionResponse,
+    CompletionTriggerKind, DidChangeTextDocumentParams, Documentation, HoverProviderCapability,
+    InitializedParams, MarkupContent, MarkupKind, OneOf, Range, ServerCapabilities, ServerInfo,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
 };
 use tower_lsp::{
@@ -18,10 +21,10 @@ use tower_lsp::{
 use dashmap::DashMap;
 use ropey::Rope;
 
-use crate::config::{config_exist, read_config, JinjaConfig};
+use crate::config::{config_exist, read_config, JinjaConfig, LangType};
 use crate::filters::init_filter_completions;
 use crate::lsp_files::LspFiles;
-use crate::query_helper::Queries;
+use crate::query_helper::{CompletionType, Queries, QueryType};
 use crate::to_input_edit::ToInputEdit;
 
 pub struct Backend {
@@ -138,19 +141,78 @@ impl LanguageServer for Backend {
                     let mut w = LocalWriter::default();
                     let _ = rope.write_to(&mut w);
                     let _ = self.lsp_files.lock().is_ok_and(|lsp_files| {
-                        lsp_files.input_edit(uri, w.content, input_edit);
+                        let lang_type = self.get_lang_type(uri);
+                        lsp_files.input_edit(uri, w.content, input_edit, lang_type);
                         true
                     });
                 }
             }
         }
-        // if let Some(text) = params.content_changes.first_mut() {
-        // self.on_change(ServerTextDocumentItem {
-        //     uri: params.text_document.uri,
-        //     text: std::mem::take(&mut text.text),
-        // })
-        // .await
-        // }
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let can_complete = {
+            matches!(
+                params.context,
+                Some(CompletionContext {
+                    trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                    ..
+                }) | Some(CompletionContext {
+                    trigger_kind: CompletionTriggerKind::INVOKED,
+                    ..
+                })
+            )
+        };
+
+        // TODO disable for backend and javascript
+        if !can_complete {
+            let can_complete = self.can_complete.read().is_ok_and(|d| *d);
+            if !can_complete {
+                return Ok(None);
+            }
+        }
+        let uri = &params.text_document_position.text_document.uri;
+        let mut lang_type = None;
+
+        self.config.read().is_ok_and(|config| {
+            if let Some(config) = config.as_ref() {
+                lang_type = config.file_ext(&Path::new(&uri.as_str()));
+            }
+            false
+        });
+        let mut completion = None;
+        let mut items = None;
+        if let Some(lang_type) = lang_type {
+            if lang_type == LangType::Template {
+                completion = self.start_completion(&params.text_document_position, uri.to_string());
+            }
+        }
+        if let Some(compl) = completion {
+            match compl {
+                CompletionType::Pipe => {
+                    let completions = self.filter_values.clone();
+                    let mut ret = Vec::with_capacity(completions.len());
+                    for item in completions.into_iter() {
+                        ret.push(CompletionItem {
+                            label: item.0.to_string(),
+                            kind: Some(CompletionItemKind::TEXT),
+                            documentation: Some(Documentation::MarkupContent(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: item.1.to_string(),
+                            })),
+                            ..Default::default()
+                        });
+                    }
+                    items = Some(CompletionResponse::Array(ret));
+                    //
+                }
+                CompletionType::Identifier => {
+                    //
+                }
+            }
+        }
+
+        Ok(items)
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -192,6 +254,56 @@ impl Backend {
         let (start, _) = range.to_byte(rope);
         rope.insert(start, text);
         None
+    }
+
+    fn get_lang_type(&self, path: &String) -> Option<LangType> {
+        let path = Path::new(path);
+        let config = self.config.read();
+        let mut lang_type = None;
+        let _ = config.is_ok_and(|config| {
+            if let Some(config) = config.as_ref() {
+                lang_type = config.file_ext(&path);
+            }
+            true
+        });
+        lang_type
+    }
+
+    fn start_completion(
+        &self,
+        text_params: &TextDocumentPositionParams,
+        uri: String,
+    ) -> Option<CompletionType> {
+        let text = self.document_map.get(&uri)?;
+        let text = text.to_string();
+        let pos = text_params.position;
+        let mut res = None;
+        let _ = self.queries.lock().is_ok_and(|queries| {
+            if let Ok(lsp_files) = self.lsp_files.lock() {
+                if let Some(index) = lsp_files.get_index(&uri) {
+                    res = lsp_files.query_completion(
+                        index,
+                        &text,
+                        QueryType::Completion,
+                        pos,
+                        &queries,
+                    );
+                } else if let Some(index) = lsp_files.add_file(String::from(&uri)) {
+                    lsp_files.add_tree(index, LangType::Template, &text, None);
+                    res = lsp_files.query_completion(
+                        index,
+                        &text,
+                        QueryType::Completion,
+                        pos,
+                        &queries,
+                    );
+                } else {
+                    res = None;
+                }
+            }
+            true
+        });
+        res
     }
 }
 

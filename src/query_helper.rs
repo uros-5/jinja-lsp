@@ -103,7 +103,6 @@ pub fn query_ident(
     let mut capturer = JinjaCompletionCapturer::default();
     let query = &query.jinja_completion_query;
     let props = query_props(root, source, trigger_point, query, false, capturer);
-    dbg!(&props);
     let ident_waiting = props.get("ident_waiting")?;
     let keyword = props.get("key_name")?;
     if trigger_point > keyword.end_position && trigger_point <= ident_waiting.end_position {
@@ -111,7 +110,6 @@ pub fn query_ident(
 
         match key_id {
             Some(capture) => {
-                dbg!(capture);
                 if trigger_point > capture.start_position && trigger_point <= capture.end_position {
                     None
                 } else {
@@ -340,11 +338,5 @@ mod tests1 {
             );
             assert_eq!(compl, case.1);
         }
-
-        // let query = &query.jinja_completion_query;
-        // let mut capturer = JinjaCompletionCapturer::default();
-        // let props = query_props(closest_node, case, trigger_point, query, false, capturer);
-        // dbg!(&props);
-        // assert_eq!(props.len(), 6);
     }
 }

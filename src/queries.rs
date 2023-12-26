@@ -42,7 +42,7 @@ pub static JINJA_COMPLETION: &str = r#"
  ( 
    [	
     (expression
-        (identifier)
+        (identifier) @key_id
         (operator) @pipe
         (identifier)? @filter
         (#match? @pipe "|")
@@ -63,6 +63,35 @@ pub static JINJA_COMPLETION: &str = r#"
         (expression_end) @end
     ) @empty_expression
     (#not-match? @empty_expression "\\|")
+
+    ]
+  )
+"#;
+
+pub static GOTO_DEF_JINJA: &str = r#"
+( 
+   [	
+    (expression
+        (identifier) @key_id
+        (operator) @pipe
+        (identifier)? @filter
+        (#match? @pipe "|")
+    ) @expr_with_pipes
+
+  	(
+      	(statement
+          	_
+              (keyword) @key_name
+              (identifier)? @key_id
+              (#match? @key_name "(if|in|and|or|elif)")
+              (_)
+          ) 
+    ) @just_statement
+
+    (expression
+        (identifier) @key_id
+    ) @basic_expr
+    (#not-match? @basic_expr "\\|")
 
     ]
   )

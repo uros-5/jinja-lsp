@@ -4,7 +4,7 @@ use tree_sitter::{Node, Point, Query, QueryCursor};
 
 use crate::{
     capturer::{Capturer, JinjaCompletionCapturer},
-    queries::{JINJA_COMPLETION, JINJA_DEF, JINJA_REF, RUST_DEF},
+    queries::{GOTO_DEF_JINJA, JINJA_COMPLETION, JINJA_DEF, JINJA_REF, RUST_DEF},
 };
 
 #[derive(Debug)]
@@ -12,6 +12,7 @@ pub struct Queries {
     pub jinja_ident_query: Query,
     pub jinja_ref_query: Query,
     pub jinja_completion_query: Query,
+    pub jinja_goto_def_query: Query,
     pub rust_ident_query: Query,
 }
 
@@ -26,6 +27,8 @@ impl Default for Queries {
         Self {
             jinja_ident_query: Query::new(tree_sitter_jinja2::language(), JINJA_DEF).unwrap(),
             jinja_ref_query: Query::new(tree_sitter_jinja2::language(), JINJA_REF).unwrap(),
+            jinja_goto_def_query: Query::new(tree_sitter_jinja2::language(), GOTO_DEF_JINJA)
+                .unwrap(),
             jinja_completion_query: Query::new(tree_sitter_jinja2::language(), JINJA_COMPLETION)
                 .unwrap(),
             rust_ident_query: Query::new(tree_sitter_rust::language(), RUST_DEF).unwrap(),
@@ -45,11 +48,101 @@ pub enum CompletionType {
     Identifier,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CaptureDetails {
-    pub value: String,
-    pub end_position: Point,
     pub start_position: Point,
+    pub end_position: Point,
+    pub value: String,
+}
+
+pub fn query_hover(
+    root: Node<'_>,
+    source: &str,
+    trigger_point: Point,
+    query: &Queries,
+) -> Option<String> {
+    let closest_node = root.descendant_for_point_range(trigger_point, trigger_point)?;
+    let element = find_element_referent_to_current_node(closest_node)?;
+    let capturer = JinjaCompletionCapturer::default();
+    let props = query_props(
+        element,
+        source,
+        trigger_point,
+        &query.jinja_completion_query,
+        false,
+        capturer,
+    );
+    let filter = props.get("filter")?;
+    if trigger_point >= filter.start_position && trigger_point <= filter.end_position {
+        return Some(filter.value.to_string());
+    }
+    None
+}
+
+pub fn query_action(
+    root: Node<'_>,
+    source: &str,
+    trigger_point: Point,
+    query: &Queries,
+) -> Option<String> {
+    let closest_node = root.descendant_for_point_range(trigger_point, trigger_point)?;
+    let element = find_element_referent_to_current_node(closest_node)?;
+    let capturer = JinjaCompletionCapturer::default();
+    let props = query_props(
+        element,
+        source,
+        trigger_point,
+        &query.jinja_ref_query,
+        false,
+        capturer,
+    );
+    let filter = props.get("temp_expression")?;
+    if trigger_point >= filter.start_position && trigger_point <= filter.end_position {
+        return Some(filter.value.to_string());
+    }
+    None
+}
+
+pub fn query_definition(
+    root: Node<'_>,
+    source: &str,
+    trigger_point: Point,
+    query: &Queries,
+) -> Option<String> {
+    let closest_node = root.descendant_for_point_range(trigger_point, trigger_point)?;
+    let element = find_element_referent_to_current_node(closest_node)?;
+    let capturer = JinjaCompletionCapturer::default();
+    let props = query_props(
+        element,
+        source,
+        trigger_point,
+        &query.jinja_goto_def_query,
+        false,
+        capturer,
+    );
+    let id = props.get("key_id")?;
+    let expr_with_pipes = props.get("expr_with_pipes");
+    let just_statement = props.get("just_statement");
+    let basic_expr = props.get("basic_expr");
+    if expr_with_pipes.is_some()
+        && trigger_point >= id.start_position
+        && trigger_point <= id.end_position
+    {
+        return Some(id.value.to_string());
+    }
+    if just_statement.is_some()
+        && trigger_point >= id.start_position
+        && trigger_point <= id.end_position
+    {
+        return Some(id.value.to_string());
+    }
+    if basic_expr.is_some()
+        && trigger_point >= id.start_position
+        && trigger_point <= id.end_position
+    {
+        return Some(id.value.to_string());
+    }
+    None
 }
 
 pub fn query_completion(
@@ -225,7 +318,7 @@ mod tests1 {
         let query = &query.jinja_ident_query;
         let capturer = JinjaCapturer::default();
         let props = query_props(closest_node, case, trigger_point, query, true, capturer);
-        assert_eq!(props.len(), 10);
+        assert_eq!(props.len(), 7);
     }
 
     #[test]
@@ -323,4 +416,7 @@ mod tests1 {
             assert_eq!(compl, case.1);
         }
     }
+
+    #[test]
+    fn hover_filter() {}
 }

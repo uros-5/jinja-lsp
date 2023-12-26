@@ -46,6 +46,9 @@ impl Capturer for JinjaCapturer {
     ) {
         let key = capture_names[capture.index as usize].to_owned();
         let value = self.value(capture, source);
+        if value.parse::<u32>().is_ok() {
+            return;
+        }
         if key == "key_name" {
             self.was_keyword = true;
         } else if self.was_keyword || self.force {
@@ -160,7 +163,9 @@ impl Capturer for RustCapturer {
 }
 
 #[derive(Default)]
-pub struct JinjaCompletionCapturer;
+pub struct JinjaCompletionCapturer {
+    pub filter_name: String,
+}
 
 impl Capturer for JinjaCompletionCapturer {
     fn save_by(

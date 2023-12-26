@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::OsStr,
     fs::read_to_string,
     path::Path,
@@ -12,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use walkdir::WalkDir;
 
-use crate::{lsp_files::LspFiles, query_helper::Queries};
+use crate::{
+    lsp_files::{JinjaVariable, LspFiles},
+    query_helper::Queries,
+};
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
@@ -49,7 +53,7 @@ pub fn read_config(
     lsp_files: &Arc<Mutex<LspFiles>>,
     queries: &Arc<Mutex<Queries>>,
     document_map: &DashMap<String, Rope>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<HashMap<String, Vec<JinjaVariable>>> {
     if let Ok(config) = config.read() {
         if let Some(config) = config.as_ref() {
             if config.templates.is_empty() {
@@ -68,13 +72,14 @@ pub fn read_config(
     }
 }
 
-fn walkdir(
+pub fn walkdir(
     config: &JinjaConfig,
     lsp_files: &Arc<Mutex<LspFiles>>,
     queries: &Arc<Mutex<Queries>>,
     document_map: &DashMap<String, Rope>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<HashMap<String, Vec<JinjaVariable>>> {
     let templates = WalkDir::new(&config.templates);
+    let mut diags = HashMap::new();
     for (index, entry) in templates.into_iter().enumerate() {
         let entry = entry?;
         let metadata = entry.metadata()?;
@@ -82,26 +87,18 @@ fn walkdir(
             let path = &entry.path();
             let ext = config.file_ext(path);
             if let Some(ext) = ext {
+                if ext == LangType::Backend {
+                    continue;
+                }
                 let _ = lsp_files.lock().is_ok_and(|lsp_files| {
-                    lsp_files.read_files(path, ext, queries, document_map);
+                    lsp_files.read_file(path, ext, queries, document_map, &mut diags);
                     true
                 });
-                // let _ = queries.lock().is_ok_and(|queries| {
-                //     add_file(path, &lsp_files, lang_type, &queries, false, document_map);
-                //     true
-                // });
-                // match ext {
-                //     LangType::Template => todo!(),
-                //     LangType::Backend => todo!(),
-                // }
             }
-            // TODO create index for file
-            // based on extension create tree for lang
-            // add tree to LangType, (index, tree)
         }
     }
 
-    Ok(())
+    Ok(diags)
 }
 
 fn is_backend(lang: &str) -> bool {
@@ -123,6 +120,7 @@ fn add_file(
             let rope = ropey::Rope::from_str(&content);
             document_map.insert(format!("file://{}", name).to_string(), rope);
             lsp_files.add_tree(file, lang_type, &content, None);
+            lsp_files.add_variables(file, lang_type, &content, queries);
             // let _ = lsp_files.add_tags_from_file(file, lang_type, &content, false, queries, diags);
             true
         });

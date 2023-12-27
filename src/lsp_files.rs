@@ -1,13 +1,12 @@
 use std::{
     cell::RefCell,
-    cmp::Ordering,
     collections::HashMap,
     fs::read_to_string,
     path::Path,
-    sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock},
+    sync::{Arc, Mutex, MutexGuard, RwLock},
 };
 
-use dashmap::{mapref::one::RefMut, DashMap};
+use dashmap::{DashMap};
 use ropey::Rope;
 use tower_lsp::lsp_types::Position;
 use tree_sitter::{InputEdit, Point, Range, Tree};
@@ -17,7 +16,7 @@ use crate::{
     config::{JinjaConfig, LangType},
     parsers::Parsers,
     query_helper::{
-        query_action, query_completion, query_definition, query_hover, query_ident, query_props,
+        query_action, query_completion, query_definition, query_hover, query_props,
         CaptureDetails, CompletionType, Queries, QueryType,
     },
     server::LocalWriter,
@@ -81,23 +80,24 @@ impl LspFiles {
     }
 
     pub fn add_tree(&self, index: usize, lang_type: LangType, text: &str, _range: Option<Range>) {
-        let _ = self.parsers.lock().is_ok_and(|mut parsers| {
-            let mut old_trees = self.trees.get_mut(&lang_type).unwrap();
-            if let Some(old_tree) = old_trees.get_mut(&index) {
-                if let Some(tree) = parsers.parse(lang_type, text, Some(&old_tree)) {
-                    let lang = lang_type;
-                    drop(old_tree);
-                    old_trees.insert(index, tree);
+        self.parsers
+            .lock()
+            .ok()
+            .and_then(|mut parsers| -> Option<()> {
+                let old_trees = self.trees.get_mut(&lang_type).unwrap();
+                if let Some(old_tree) = old_trees.get_mut(&index) {
+                    if let Some(tree) = parsers.parse(lang_type, text, Some(&old_tree)) {
+                        drop(old_tree);
+                        old_trees.insert(index, tree);
+                    }
+                } else {
+                    // tree doesn't exist, first insertion
+                    if let Some(tree) = parsers.parse(lang_type, text, None) {
+                        old_trees.insert(index, tree);
+                    }
                 }
-            } else {
-                // tree doesn't exist, first insertion
-                if let Some(tree) = parsers.parse(lang_type, text, None) {
-                    old_trees.insert(index, tree);
-                }
-            }
-
-            true
-        });
+                None
+            });
     }
 
     pub fn read_file(
@@ -114,18 +114,20 @@ impl LspFiles {
         if let Ok(name) = std::fs::canonicalize(path) {
             let name = name.to_str()?;
             let file = self.add_file(format!("file://{}", name))?;
-            let _ = read_to_string(name).is_ok_and(|content| {
-                let rope = ropey::Rope::from_str(&content);
+            let mut file_content = String::new();
+            read_to_string(name).ok().and_then(|content| -> Option<()> {
+                file_content = content;
+                let rope = ropey::Rope::from_str(&file_content);
                 document_map.insert(format!("file://{}", name).to_string(), rope);
-                self.add_tree(file, lang_type, &content, None);
-                let _ = queries.lock().is_ok_and(|query| {
-                    self.delete_variables(file);
-                    errors = self.add_variables(file, lang_type, &content, &query);
-                    index.push_str("file://");
-                    index.push_str(name);
-                    true
-                });
-                true
+                self.add_tree(file, lang_type, &file_content, None);
+                None
+            });
+            let _ = queries.lock().ok().and_then(|query| -> Option<()> {
+                self.delete_variables(file);
+                errors = self.add_variables(file, lang_type, &file_content, &query);
+                index.push_str("file://");
+                index.push_str(name);
+                None
             });
         }
         let errors = errors?;
@@ -142,12 +144,10 @@ impl LspFiles {
     ) -> Option<()> {
         let lang_type = lang_type?;
         let file = self.get_index(file)?;
-        let _ = self.parsers.lock().is_ok_and(|parsers| {
-            self.edit_old_tree(file, lang_type, input_edit, parsers, code);
-            true
-        });
-
-        None
+        self.parsers
+            .lock()
+            .ok()
+            .and_then(|parsers| self.edit_old_tree(file, lang_type, input_edit, parsers, code))
     }
     pub fn edit_old_tree(
         &self,
@@ -172,7 +172,7 @@ impl LspFiles {
         &self,
         index: usize,
         text: &str,
-        query_type: QueryType,
+        _query_type: QueryType,
         pos: Position,
         query: &Queries,
     ) -> Option<CompletionType> {
@@ -187,7 +187,7 @@ impl LspFiles {
         &self,
         index: usize,
         text: &str,
-        query_type: QueryType,
+        _query_type: QueryType,
         pos: Position,
         query: &Queries,
     ) -> Option<String> {
@@ -202,7 +202,7 @@ impl LspFiles {
         &self,
         index: usize,
         text: &str,
-        query_type: QueryType,
+        _query_type: QueryType,
         pos: Position,
         query: &Queries,
     ) -> Option<String> {
@@ -217,7 +217,7 @@ impl LspFiles {
         &self,
         index: usize,
         text: &str,
-        query_type: QueryType,
+        _query_type: QueryType,
         pos: Position,
         query: &Queries,
     ) -> Option<String> {
@@ -268,16 +268,15 @@ impl LspFiles {
     pub fn saved(
         &self,
         uri: &String,
-        config: &RwLock<Option<JinjaConfig>>,
+        config: &RwLock<JinjaConfig>,
         document_map: &DashMap<String, Rope>,
         queries: &Arc<Mutex<Queries>>,
         diags: &mut HashMap<String, Vec<JinjaVariable>>,
     ) -> Option<()> {
         let path = Path::new(&uri);
         let file = self.get_index(uri)?;
-        let mut res = None;
+        let res = None;
         if let Ok(config) = config.read() {
-            let config = config.as_ref()?;
             let lang_type = config.file_ext(&path)?;
             if lang_type == LangType::Backend {
                 return None;

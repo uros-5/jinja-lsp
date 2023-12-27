@@ -1,9 +1,7 @@
 use std::{
     collections::HashMap,
-    ffi::OsStr,
-    fs::read_to_string,
     path::Path,
-    sync::{Arc, Mutex, MutexGuard, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::Error;
@@ -20,11 +18,13 @@ use crate::{
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct JinjaConfig {
     templates: String,
     backend: Vec<String>,
     lang: String,
+    #[serde(skip)]
+    pub user_defined: bool,
 }
 
 impl JinjaConfig {
@@ -38,34 +38,39 @@ impl JinjaConfig {
             None => None,
         }
     }
+
+    pub fn user_defined(&mut self, def: bool) -> Option<()> {
+        self.user_defined = def;
+        None
+    }
 }
 
 pub fn config_exist(config: Option<Value>) -> Option<JinjaConfig> {
     let config = config?;
-    if let Ok(config) = serde_json::from_value::<JinjaConfig>(config) {
+    if let Ok(mut config) = serde_json::from_value::<JinjaConfig>(config) {
+        config.user_defined = true;
         return Some(config);
     }
     None
 }
 
 pub fn read_config(
-    config: &RwLock<Option<JinjaConfig>>,
+    config: &RwLock<JinjaConfig>,
     lsp_files: &Arc<Mutex<LspFiles>>,
     queries: &Arc<Mutex<Queries>>,
     document_map: &DashMap<String, Rope>,
 ) -> anyhow::Result<HashMap<String, Vec<JinjaVariable>>> {
     if let Ok(config) = config.read() {
-        if let Some(config) = config.as_ref() {
-            if config.templates.is_empty() {
-                return Err(Error::msg("Template directory not found"));
-            }
-            if !is_backend(&config.lang) {
-                Err(Error::msg("Backend language not supported"))
-            } else {
-                walkdir(config, lsp_files, queries, document_map)
-            }
+        if !config.user_defined {
+            return Err(Error::msg("Config doesn't exist"));
+        }
+        if config.templates.is_empty() {
+            return Err(Error::msg("Template directory not found"));
+        }
+        if !is_backend(&config.lang) {
+            Err(Error::msg("Backend language not supported"))
         } else {
-            Err(Error::msg("Config doesn't exist"))
+            walkdir(&config, lsp_files, queries, document_map)
         }
     } else {
         Err(Error::msg("Config doesn't exist"))
@@ -80,7 +85,7 @@ pub fn walkdir(
 ) -> anyhow::Result<HashMap<String, Vec<JinjaVariable>>> {
     let templates = WalkDir::new(&config.templates);
     let mut diags = HashMap::new();
-    for (index, entry) in templates.into_iter().enumerate() {
+    for (_index, entry) in templates.into_iter().enumerate() {
         let entry = entry?;
         let metadata = entry.metadata()?;
         if metadata.is_file() {
@@ -103,29 +108,6 @@ pub fn walkdir(
 
 fn is_backend(lang: &str) -> bool {
     lang == "rust"
-}
-
-fn add_file(
-    path: &&Path,
-    lsp_files: &MutexGuard<LspFiles>,
-    lang_type: LangType,
-    queries: &Queries,
-    _skip: bool,
-    document_map: &DashMap<String, Rope>,
-) -> Option<()> {
-    if let Ok(name) = std::fs::canonicalize(path) {
-        let name = name.to_str()?;
-        let file = lsp_files.add_file(format!("file://{}", name))?;
-        let _ = read_to_string(name).is_ok_and(|content| {
-            let rope = ropey::Rope::from_str(&content);
-            document_map.insert(format!("file://{}", name).to_string(), rope);
-            lsp_files.add_tree(file, lang_type, &content, None);
-            lsp_files.add_variables(file, lang_type, &content, queries);
-            // let _ = lsp_files.add_tags_from_file(file, lang_type, &content, false, queries, diags);
-            true
-        });
-    }
-    None
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]

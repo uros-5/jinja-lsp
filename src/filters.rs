@@ -17,10 +17,6 @@ impl From<&(&str, &str)> for HxCompletion {
     }
 }
 
-fn to_filter_completions(values: Vec<(&str, &str)>) -> Vec<HxCompletion> {
-    values.iter().filter_map(|x| x.try_into().ok()).collect()
-}
-
 pub fn init_filter_completions() -> HashMap<String, String> {
     let mut hm = HashMap::new();
     hm.insert(

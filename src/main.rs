@@ -1,7 +1,7 @@
 use jinja2_lsp::server::Backend;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tower_lsp::jsonrpc::Result;
+
+
+
 use tower_lsp::LspService;
 use tower_lsp::Server;
 

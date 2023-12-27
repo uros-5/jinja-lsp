@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
-use std::{result::Result as StdResult, sync::RwLockWriteGuard};
+
+
 
 use dashmap::mapref::one::RefMut;
 use serde_json::Value;
-use tokio::time::sleep;
+
 use tower_lsp::lsp_types::{
-    CodeAction, CodeActionCapabilityResolveSupport, CodeActionKind, CodeActionOrCommand,
+    CodeAction, CodeActionKind, CodeActionOrCommand,
     CodeActionParams, CodeActionProviderCapability, CodeActionResponse, Command, CompletionContext,
-    CompletionItem, CompletionItemKind, CompletionOptions, CompletionOptionsCompletionItem,
+    CompletionItem, CompletionItemKind, CompletionOptions,
     CompletionParams, CompletionResponse, CompletionTriggerKind, Diagnostic, DiagnosticSeverity,
     DidChangeTextDocumentParams, DidSaveTextDocumentParams, Documentation, ExecuteCommandOptions,
     ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
@@ -22,7 +22,7 @@ use tower_lsp::lsp_types::{
 use tower_lsp::{
     jsonrpc::Result,
     lsp_types::{InitializeParams, InitializeResult, MessageType},
-    Client, LanguageServer, LspService, Server,
+    Client, LanguageServer,
 };
 
 use dashmap::DashMap;
@@ -38,7 +38,7 @@ pub struct Backend {
     client: Client,
     document_map: DashMap<String, Rope>,
     can_complete: RwLock<bool>,
-    config: RwLock<Option<JinjaConfig>>,
+    config: RwLock<JinjaConfig>,
     filter_values: HashMap<String, String>,
     pub lsp_files: Arc<Mutex<LspFiles>>,
     pub queries: Arc<Mutex<Queries>>,
@@ -63,18 +63,21 @@ impl LanguageServer for Backend {
 
         match config_exist(params.initialization_options) {
             Some(config) => {
-                let _ = self.config.try_write().is_ok_and(|mut jinja_config| {
-                    definition_provider = Some(OneOf::Left(true));
-                    references_provider = Some(OneOf::Left(true));
-                    code_action_provider = Some(CodeActionProviderCapability::Simple(true));
-                    hover_provider = Some(HoverProviderCapability::Simple(true));
-                    execute_command_provider = Some(ExecuteCommandOptions {
-                        commands: vec!["reset_variables".to_string()],
-                        ..Default::default()
+                self.config
+                    .try_write()
+                    .ok()
+                    .and_then(|mut jinja_config| -> Option<()> {
+                        definition_provider = Some(OneOf::Left(true));
+                        references_provider = Some(OneOf::Left(true));
+                        code_action_provider = Some(CodeActionProviderCapability::Simple(true));
+                        hover_provider = Some(HoverProviderCapability::Simple(true));
+                        execute_command_provider = Some(ExecuteCommandOptions {
+                            commands: vec!["reset_variables".to_string()],
+                            ..Default::default()
+                        });
+                        *jinja_config = config;
+                        None
                     });
-                    *jinja_config = Some(config);
-                    true
-                });
             }
             None => {
                 self.client
@@ -134,10 +137,10 @@ impl LanguageServer for Backend {
                 self.publish_tag_diagnostics(d, None).await;
             }
             Err(err) => {
-                let _ = self.config.write().is_ok_and(|mut config| {
-                    *config = None;
-                    true
-                });
+                self.config
+                    .write()
+                    .ok()
+                    .and_then(|mut config| config.user_defined(false));
                 let msg = err.to_string();
                 self.client.log_message(MessageType::INFO, msg).await;
             }
@@ -145,27 +148,9 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = &params.text_document.uri.to_string();
-        let rope = self.document_map.get_mut(uri);
-        if let Some(mut rope) = rope {
-            for change in params.content_changes {
-                if let Some(range) = &change.range {
-                    let input_edit = range.to_input_edit(&rope);
-                    if change.text.is_empty() {
-                        self.on_remove(range, &mut rope);
-                    } else {
-                        self.on_insert(range, &change.text, &mut rope);
-                    }
-                    let mut w = LocalWriter::default();
-                    let _ = rope.write_to(&mut w);
-                    let _ = self.lsp_files.lock().is_ok_and(|lsp_files| {
-                        let lang_type = self.get_lang_type(uri);
-                        lsp_files.input_edit(uri, w.content, input_edit, lang_type);
-                        true
-                    });
-                }
-            }
-        }
+        let uri = params.text_document.uri.to_string();
+        let rope = self.document_map.get_mut(&uri);
+        rope.and_then(|mut rope| self.on_change(&mut rope, params, uri));
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -190,14 +175,8 @@ impl LanguageServer for Backend {
             }
         }
         let uri = &params.text_document_position.text_document.uri;
-        let mut lang_type = None;
+        let lang_type = self.get_lang_type(uri.as_str());
 
-        self.config.read().is_ok_and(|config| {
-            if let Some(config) = config.as_ref() {
-                lang_type = config.file_ext(&Path::new(&uri.as_str()));
-            }
-            false
-        });
         let mut completion = None;
         let mut items = None;
         if let Some(lang_type) = lang_type {
@@ -270,7 +249,7 @@ impl LanguageServer for Backend {
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let uri = params.text_document.uri.to_string();
         let mut primer = CodeActionResponse::new();
-        if let Some(expr) = self.is_expr(&params, uri) {
+        if self.is_expr(&params, uri).is_some() {
             let abc = CodeActionOrCommand::CodeAction(CodeAction {
                 title: "Reset variables".to_string(),
                 kind: Some(CodeActionKind::EMPTY),
@@ -289,11 +268,10 @@ impl LanguageServer for Backend {
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         let command = params.command;
         if command == "reset_variables" {
-            if let Ok(config) = self.config.read() {
-                if let Some(config) = config.as_ref() {
-                    let _ = walkdir(config, &self.lsp_files, &self.queries, &self.document_map);
-                }
-            }
+            self.config.read().ok().and_then(|config| -> Option<()> {
+                let _ = walkdir(&config, &self.lsp_files, &self.queries, &self.document_map);
+                None
+            });
         }
         Ok(None)
     }
@@ -303,9 +281,9 @@ impl LanguageServer for Backend {
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
         let uri = &params.text_document_position_params.text_document.uri;
-        let definition =
+        let _definition =
             self.start_definition(&params.text_document_position_params, uri.to_string());
-        let mut res = None;
+        let res = None;
         Ok(res)
     }
 
@@ -318,7 +296,7 @@ impl Backend {
     pub fn new(client: Client) -> Self {
         let document_map = DashMap::new();
         let can_complete = RwLock::new(false);
-        let config = RwLock::new(None);
+        let config = RwLock::new(JinjaConfig::default());
         let filter_values = init_filter_completions();
         let lsp_files = Arc::new(Mutex::new(LspFiles::default()));
         let queries = Arc::new(Mutex::new(Queries::default()));
@@ -350,17 +328,36 @@ impl Backend {
         None
     }
 
-    fn get_lang_type(&self, path: &String) -> Option<LangType> {
+    fn on_change(
+        &self,
+        rope: &mut RefMut<'_, String, Rope>,
+        params: DidChangeTextDocumentParams,
+        uri: String,
+    ) -> Option<()> {
+        for change in params.content_changes {
+            let range = &change.range?;
+            let input_edit = range.to_input_edit(rope);
+            if change.text.is_empty() {
+                self.on_remove(range, rope);
+            } else {
+                self.on_insert(range, &change.text, rope);
+            }
+            let mut w = LocalWriter::default();
+            let _ = rope.write_to(&mut w);
+            let _ = self.lsp_files.lock().is_ok_and(|lsp_files| {
+                let lang_type = self.get_lang_type(&uri);
+                lsp_files.input_edit(&uri, w.content, input_edit, lang_type);
+                true
+            });
+        }
+
+        None
+    }
+
+    fn get_lang_type(&self, path: &str) -> Option<LangType> {
         let path = Path::new(path);
         let config = self.config.read();
-        let mut lang_type = None;
-        let _ = config.is_ok_and(|config| {
-            if let Some(config) = config.as_ref() {
-                lang_type = config.file_ext(&path);
-            }
-            true
-        });
-        lang_type
+        config.ok().and_then(|config| config.file_ext(&path))
     }
 
     fn start_completion(
@@ -472,7 +469,6 @@ impl Backend {
             }
             true
         });
-        dbg!(&res);
         res
     }
 

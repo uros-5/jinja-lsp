@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+
 
 use dashmap::mapref::one::RefMut;
 use serde_json::Value;
 
-use tokio::time::sleep;
+
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
     CodeActionProviderCapability, CodeActionResponse, Command, CompletionContext, CompletionItem,
@@ -379,7 +379,29 @@ impl LanguageServer for Backend {
                     }
                     items = Some(CompletionResponse::Array(ret));
                 }
-                CompletionType::Identifier => {}
+                CompletionType::Identifier => {
+                    let variables = self.lsp_files.lock().ok().and_then(|lsp_files| {
+                        lsp_files.get_all_variables(
+                            &params.text_document_position.text_document.uri.to_string(),
+                        )
+                    });
+                    let mut ret = vec![];
+                    if let Some(variables) = variables {
+                        if variables.is_empty() {
+                            items = None;
+                            return Ok(items);
+                        }
+                        for variable in variables {
+                            ret.push(CompletionItem {
+                                label: variable.1.to_string(),
+                                detail: Some(variable.0.to_string()),
+                                kind: Some(CompletionItemKind::VARIABLE),
+                                ..Default::default()
+                            });
+                        }
+                        items = Some(CompletionResponse::Array(ret))
+                    }
+                }
             }
         }
 

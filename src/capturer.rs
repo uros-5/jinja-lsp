@@ -1,11 +1,8 @@
 use std::collections::HashMap;
 
-use tree_sitter::{Point, Query, QueryCapture};
+use tree_sitter::{Point, QueryCapture};
 
-use crate::{
-    config::LangType,
-    query_helper::{CaptureDetails, Queries},
-};
+use crate::query_helper::CaptureDetails;
 
 pub trait Capturer {
     fn save_by(
@@ -208,7 +205,7 @@ impl JinjaVariableCapturer {
             self.points.push(point);
             return true;
         }
-        return false;
+        false
     }
 }
 
@@ -221,7 +218,7 @@ impl Capturer for JinjaVariableCapturer {
         source: &str,
     ) {
         let mut key = capture_names[capture.index as usize].to_owned();
-        let value = self.value(capture, source);
+        let _value = self.value(capture, source);
         if key == "temp_expression" || key == "just_statement" {
             let identifier = capture.node.child_by_field_name("identifier");
             if let Some(identifier) = identifier {
@@ -249,21 +246,6 @@ impl Capturer for JinjaVariableCapturer {
                     );
                 }
             }
-        }
-    }
-}
-
-pub fn get_capturer(lang_type: LangType, queries: &Queries) -> (&Query, Box<dyn Capturer>) {
-    match lang_type {
-        LangType::Template => (
-            &queries.jinja_ident_query,
-            Box::new(JinjaCapturer::default()),
-        ),
-        LangType::Backend => {
-            let query = &queries.rust_ident_query;
-            let mut capturer2 = RustCapturer::default();
-            capturer2.force();
-            (query, Box::new(capturer2))
         }
     }
 }

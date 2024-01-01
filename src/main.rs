@@ -1,7 +1,4 @@
 use jinja2_lsp::server::Backend;
-
-
-
 use tower_lsp::LspService;
 use tower_lsp::Server;
 

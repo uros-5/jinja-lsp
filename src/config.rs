@@ -12,7 +12,7 @@ use serde_json::Value;
 use walkdir::WalkDir;
 
 use crate::{
-    lsp_files::{JinjaVariable, LspFiles},
+    lsp_files::{JinjaDiagnostic, JinjaVariable, LspFiles},
     query_helper::Queries,
 };
 
@@ -32,7 +32,7 @@ impl JinjaConfig {
         match path.extension()?.to_str() {
             Some(e) => match e {
                 "html" | "jinja" | "j2" => Some(LangType::Template),
-                backend if is_backend(backend) => Some(LangType::Backend),
+                "rs" => Some(LangType::Backend),
                 _ => None,
             },
             None => None,
@@ -59,7 +59,7 @@ pub fn read_config(
     lsp_files: &Arc<Mutex<LspFiles>>,
     queries: &Arc<Mutex<Queries>>,
     document_map: &DashMap<String, Rope>,
-) -> anyhow::Result<HashMap<String, Vec<JinjaVariable>>> {
+) -> anyhow::Result<HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>> {
     if let Ok(config) = config.read() {
         if !config.user_defined {
             return Err(Error::msg("Config doesn't exist"));
@@ -82,26 +82,38 @@ pub fn walkdir(
     lsp_files: &Arc<Mutex<LspFiles>>,
     queries: &Arc<Mutex<Queries>>,
     document_map: &DashMap<String, Rope>,
-) -> anyhow::Result<HashMap<String, Vec<JinjaVariable>>> {
-    let templates = WalkDir::new(&config.templates);
+) -> anyhow::Result<HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>> {
+    let mut all = vec![config.templates.clone()];
+    let mut backend = config.backend.clone();
+    all.append(&mut backend);
     let mut diags = HashMap::new();
-    for (_index, entry) in templates.into_iter().enumerate() {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
-        if metadata.is_file() {
-            let path = &entry.path();
-            let ext = config.file_ext(path);
-            if let Some(ext) = ext {
-                if ext == LangType::Backend {
-                    continue;
+    for dir in all {
+        let walk = WalkDir::new(dir);
+        for (_index, entry) in walk.into_iter().enumerate() {
+            let entry = entry?;
+            let metadata = entry.metadata()?;
+            if metadata.is_file() {
+                let path = &entry.path();
+                let ext = config.file_ext(path);
+                if let Some(ext) = ext {
+                    // if ext == LangType::Backend {
+                    //     continue;
+                    // }
+                    let _ = lsp_files.lock().is_ok_and(|lsp_files| {
+                        lsp_files.read_file(path, ext, queries, document_map, &mut diags);
+                        true
+                    });
                 }
-                let _ = lsp_files.lock().is_ok_and(|lsp_files| {
-                    lsp_files.read_file(path, ext, queries, document_map, &mut diags);
-                    true
-                });
             }
         }
     }
+    let _ = lsp_files.lock().ok().and_then(|lsp_files| -> Option<()> {
+        let trees = lsp_files.get_trees_vec(LangType::Template);
+        for tree in trees {
+            lsp_files.read_tree(tree, LangType::Template, queries, document_map, &mut diags);
+        }
+        None
+    });
 
     Ok(diags)
 }

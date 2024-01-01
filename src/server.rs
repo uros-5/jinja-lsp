@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
-
-
+use std::time::Duration;
 
 use dashmap::mapref::one::RefMut;
 use serde_json::Value;
 
+use tokio::time::sleep;
 use tower_lsp::lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand,
-    CodeActionParams, CodeActionProviderCapability, CodeActionResponse, Command, CompletionContext,
-    CompletionItem, CompletionItemKind, CompletionOptions,
-    CompletionParams, CompletionResponse, CompletionTriggerKind, Diagnostic, DiagnosticSeverity,
-    DidChangeTextDocumentParams, DidSaveTextDocumentParams, Documentation, ExecuteCommandOptions,
-    ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
-    HoverParams, HoverProviderCapability, InitializedParams, MarkupContent, MarkupKind, OneOf,
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
+    CodeActionProviderCapability, CodeActionResponse, Command, CompletionContext, CompletionItem,
+    CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
+    CompletionTriggerKind, Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams,
+    DidSaveTextDocumentParams, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, InitializedParams, Location, MarkupContent, MarkupKind, OneOf,
     Position, Range, ServerCapabilities, ServerInfo, TextDocumentPositionParams,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
     TextDocumentSyncSaveOptions, Url,
@@ -30,9 +30,27 @@ use ropey::Rope;
 
 use crate::config::{config_exist, read_config, walkdir, JinjaConfig, LangType};
 use crate::filters::init_filter_completions;
-use crate::lsp_files::{JinjaVariable, LspFiles};
+use crate::lsp_files::{JinjaDiagnostic, JinjaVariable, LspFiles};
 use crate::query_helper::{CompletionType, Queries, QueryType};
-use crate::to_input_edit::ToInputEdit;
+use crate::to_input_edit::{to_position, ToInputEdit};
+
+macro_rules! simple_query {
+    (&$s:ident, $method: ident, $uri: ident, $text: ident, $query_type: ident, $pos: ident, $res: ident) => {
+        let _ = $s.queries.lock().is_ok_and(|queries| {
+            if let Ok(lsp_files) = $s.lsp_files.lock() {
+                if let Some(index) = lsp_files.get_index(&$uri) {
+                    $res = lsp_files.$method(index, &$text, $query_type, $pos, &queries);
+                } else if let Some(index) = lsp_files.add_file(String::from(&$uri)) {
+                    lsp_files.add_tree(index, LangType::Template, &$text, None);
+                    $res = lsp_files.$method(index, &$text, $query_type, $pos, &queries);
+                } else {
+                    $res = None;
+                }
+            }
+            true
+        });
+    };
+}
 
 pub struct Backend {
     client: Client,
@@ -42,6 +60,165 @@ pub struct Backend {
     filter_values: HashMap<String, String>,
     pub lsp_files: Arc<Mutex<LspFiles>>,
     pub queries: Arc<Mutex<Queries>>,
+}
+
+impl Backend {
+    pub fn new(client: Client) -> Self {
+        let document_map = DashMap::new();
+        let can_complete = RwLock::new(false);
+        let config = RwLock::new(JinjaConfig::default());
+        let filter_values = init_filter_completions();
+        let lsp_files = Arc::new(Mutex::new(LspFiles::default()));
+        let queries = Arc::new(Mutex::new(Queries::default()));
+        Self {
+            client,
+            document_map,
+            can_complete,
+            config,
+            filter_values,
+            lsp_files,
+            queries,
+        }
+    }
+
+    fn on_remove(&self, range: &Range, rope: &mut RefMut<'_, String, Rope>) -> Option<()> {
+        let (start, end) = range.to_byte(rope);
+        rope.remove(start..end);
+        None
+    }
+
+    fn on_insert(
+        &self,
+        range: &Range,
+        text: &str,
+        rope: &mut RefMut<'_, String, Rope>,
+    ) -> Option<()> {
+        let (start, _) = range.to_byte(rope);
+        rope.insert(start, text);
+        None
+    }
+
+    fn on_change(
+        &self,
+        rope: &mut RefMut<'_, String, Rope>,
+        params: DidChangeTextDocumentParams,
+        uri: String,
+    ) -> Option<()> {
+        for change in params.content_changes {
+            let range = &change.range?;
+            let input_edit = range.to_input_edit(rope);
+            if change.text.is_empty() {
+                self.on_remove(range, rope);
+            } else {
+                self.on_insert(range, &change.text, rope);
+            }
+            let mut w = FileWriter::default();
+            let _ = rope.write_to(&mut w);
+            let _ = self.lsp_files.lock().is_ok_and(|lsp_files| {
+                let lang_type = self.get_lang_type(&uri);
+                lsp_files.input_edit(&uri, w.content, input_edit, lang_type);
+                true
+            });
+        }
+
+        None
+    }
+
+    fn get_lang_type(&self, path: &str) -> Option<LangType> {
+        let path = Path::new(path);
+        let config = self.config.read();
+        config.ok().and_then(|config| config.file_ext(&path))
+    }
+
+    fn start_completion(
+        &self,
+        text_params: &TextDocumentPositionParams,
+        uri: String,
+    ) -> Option<CompletionType> {
+        let text = self.document_map.get(&uri)?;
+        let text = text.to_string();
+        let pos = text_params.position;
+        let mut res = None;
+        let query_type = QueryType::Completion;
+        simple_query!(&self, query_completion, uri, text, query_type, pos, res);
+        res
+    }
+
+    fn start_hover(&self, text_params: &TextDocumentPositionParams, uri: String) -> Option<String> {
+        let text = self.document_map.get(&uri)?;
+        let text = text.to_string();
+        let pos = text_params.position;
+        let mut res = None;
+        let query_type = QueryType::Hover;
+        simple_query!(&self, query_something, uri, text, query_type, pos, res);
+        res
+    }
+
+    fn is_expr(&self, text_params: &CodeActionParams, uri: String) -> Option<String> {
+        let text = self.document_map.get(&uri)?;
+        let text = text.to_string();
+        let pos = text_params.range.start;
+        let mut res = None;
+        let query_type = QueryType::CodeAction;
+        simple_query!(&self, query_something, uri, text, query_type, pos, res);
+        res
+    }
+
+    fn start_definition(&self, params: &TextDocumentPositionParams, uri: String) -> Option<String> {
+        let text = self.document_map.get(&uri)?;
+        let text = text.to_string();
+        let pos = params.position;
+        let mut res = None;
+        let query_type = QueryType::Definition;
+        simple_query!(&self, query_something, uri, text, query_type, pos, res);
+        res
+    }
+
+    async fn publish_tag_diagnostics(
+        &self,
+        diagnostics: HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
+        file: Option<String>,
+    ) {
+        let mut hm: HashMap<String, Vec<Diagnostic>> = HashMap::new();
+        let mut added = false;
+        for (file, diags) in diagnostics {
+            for (variable, diag2) in diags {
+                added = true;
+                let diagnostic = Diagnostic {
+                    range: Range::new(
+                        Position::new(variable.start.row as u32, variable.start.column as u32),
+                        Position::new(variable.end.row as u32, variable.end.column as u32),
+                    ),
+                    severity: Some(DiagnosticSeverity::WARNING),
+                    message: diag2.to_string(),
+                    source: Some(String::from("jinja-lsp")),
+                    ..Default::default()
+                };
+                if hm.contains_key(&file) {
+                    let _ = hm.get_mut(&file).is_some_and(|d| {
+                        d.push(diagnostic);
+                        false
+                    });
+                } else {
+                    hm.insert(String::from(&file), vec![diagnostic]);
+                }
+            }
+        }
+
+        for (url, diagnostics) in hm {
+            if let Ok(uri) = Url::parse(&url) {
+                self.client
+                    .publish_diagnostics(uri, diagnostics, None)
+                    .await;
+            }
+        }
+        if let Some(uri) = file {
+            if !added {
+                let uri = Url::parse(&uri).unwrap();
+                self.client.publish_diagnostics(uri, vec![], None).await;
+            }
+        }
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -72,7 +249,7 @@ impl LanguageServer for Backend {
                         code_action_provider = Some(CodeActionProviderCapability::Simple(true));
                         hover_provider = Some(HoverProviderCapability::Simple(true));
                         execute_command_provider = Some(ExecuteCommandOptions {
-                            commands: vec!["reset_variables".to_string()],
+                            commands: vec!["reset_variables".to_string(), "warn".to_string()],
                             ..Default::default()
                         });
                         *jinja_config = config;
@@ -242,6 +419,14 @@ impl LanguageServer for Backend {
                 &self.queries,
                 &mut diags,
             );
+
+            lsp_files.warn_undefined(
+                &uri,
+                &self.config,
+                &self.document_map,
+                &self.queries,
+                &mut diags,
+            );
         }
         self.publish_tag_diagnostics(diags, Some(uri)).await;
     }
@@ -250,17 +435,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri.to_string();
         let mut primer = CodeActionResponse::new();
         if self.is_expr(&params, uri).is_some() {
-            let abc = CodeActionOrCommand::CodeAction(CodeAction {
-                title: "Reset variables".to_string(),
-                kind: Some(CodeActionKind::EMPTY),
-                command: Some(Command::new(
-                    "Reset variables".to_string(),
-                    "reset_variables".to_string(),
-                    None,
-                )),
-                ..Default::default()
-            });
-            primer.push(abc);
+            primer = code_actions();
         }
         Ok(Some(primer))
     }
@@ -272,6 +447,26 @@ impl LanguageServer for Backend {
                 let _ = walkdir(&config, &self.lsp_files, &self.queries, &self.document_map);
                 None
             });
+        } else if command == "warn" {
+            let mut diags = HashMap::new();
+            let _ = self
+                .lsp_files
+                .lock()
+                .ok()
+                .and_then(|lsp_files| -> Option<()> {
+                    let trees = lsp_files.get_trees_vec(LangType::Template);
+                    for tree in trees {
+                        lsp_files.read_tree(
+                            tree,
+                            LangType::Template,
+                            &self.queries,
+                            &self.document_map,
+                            &mut diags,
+                        );
+                    }
+                    None
+                });
+            self.publish_tag_diagnostics(diags, None).await;
         }
         Ok(None)
     }
@@ -281,9 +476,51 @@ impl LanguageServer for Backend {
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
         let uri = &params.text_document_position_params.text_document.uri;
-        let _definition =
+        let mut res = None;
+        let definition =
             self.start_definition(&params.text_document_position_params, uri.to_string());
-        let res = None;
+        if let Some(definition) = definition {
+            res = self
+                .lsp_files
+                .lock()
+                .ok()
+                .and_then(|lsp_files| {
+                    let index = lsp_files.get_index(&uri.to_string())?;
+                    let variables = lsp_files.variables.get(&index)?;
+                    let variable = variables.iter().find(|v| v.name == definition);
+                    variable.cloned()
+                })
+                .map(|variable| {
+                    let (start, end) = to_position(&variable);
+                    let range = Range::new(start, end);
+                    GotoDefinitionResponse::Scalar(Location {
+                        uri: uri.clone(),
+                        range,
+                    })
+                });
+            if res.is_none() {
+                res = self
+                    .lsp_files
+                    .lock()
+                    .ok()
+                    .and_then(|lsp_files| lsp_files.get_jinja_variables(&definition))
+                    .map(|variables| {
+                        let mut all = vec![];
+                        for i in variables.iter() {
+                            for variable in i.1 {
+                                let (start, end) = to_position(variable);
+                                let range = Range::new(start, end);
+                                let location = Location {
+                                    uri: Url::parse(i.0.as_str()).unwrap(),
+                                    range,
+                                };
+                                all.push(location);
+                            }
+                        }
+                        GotoDefinitionResponse::Array(all)
+                    });
+            }
+        }
         Ok(res)
     }
 
@@ -292,239 +529,32 @@ impl LanguageServer for Backend {
     }
 }
 
-impl Backend {
-    pub fn new(client: Client) -> Self {
-        let document_map = DashMap::new();
-        let can_complete = RwLock::new(false);
-        let config = RwLock::new(JinjaConfig::default());
-        let filter_values = init_filter_completions();
-        let lsp_files = Arc::new(Mutex::new(LspFiles::default()));
-        let queries = Arc::new(Mutex::new(Queries::default()));
-        Self {
-            client,
-            document_map,
-            can_complete,
-            config,
-            filter_values,
-            lsp_files,
-            queries,
-        }
+pub fn code_actions() -> Vec<CodeActionOrCommand> {
+    let mut commands = vec![];
+    for command in [
+        ("Reset variables", "reset_variables"),
+        ("Warn about unused", "warn"),
+    ] {
+        commands.push(CodeActionOrCommand::CodeAction(CodeAction {
+            title: command.0.to_string(),
+            kind: Some(CodeActionKind::EMPTY),
+            command: Some(Command::new(
+                command.1.to_string(),
+                command.1.to_string(),
+                None,
+            )),
+            ..Default::default()
+        }));
     }
-
-    fn on_remove(&self, range: &Range, rope: &mut RefMut<'_, String, Rope>) -> Option<()> {
-        let (start, end) = range.to_byte(rope);
-        rope.remove(start..end);
-        None
-    }
-
-    fn on_insert(
-        &self,
-        range: &Range,
-        text: &str,
-        rope: &mut RefMut<'_, String, Rope>,
-    ) -> Option<()> {
-        let (start, _) = range.to_byte(rope);
-        rope.insert(start, text);
-        None
-    }
-
-    fn on_change(
-        &self,
-        rope: &mut RefMut<'_, String, Rope>,
-        params: DidChangeTextDocumentParams,
-        uri: String,
-    ) -> Option<()> {
-        for change in params.content_changes {
-            let range = &change.range?;
-            let input_edit = range.to_input_edit(rope);
-            if change.text.is_empty() {
-                self.on_remove(range, rope);
-            } else {
-                self.on_insert(range, &change.text, rope);
-            }
-            let mut w = LocalWriter::default();
-            let _ = rope.write_to(&mut w);
-            let _ = self.lsp_files.lock().is_ok_and(|lsp_files| {
-                let lang_type = self.get_lang_type(&uri);
-                lsp_files.input_edit(&uri, w.content, input_edit, lang_type);
-                true
-            });
-        }
-
-        None
-    }
-
-    fn get_lang_type(&self, path: &str) -> Option<LangType> {
-        let path = Path::new(path);
-        let config = self.config.read();
-        config.ok().and_then(|config| config.file_ext(&path))
-    }
-
-    fn start_completion(
-        &self,
-        text_params: &TextDocumentPositionParams,
-        uri: String,
-    ) -> Option<CompletionType> {
-        let text = self.document_map.get(&uri)?;
-        let text = text.to_string();
-        let pos = text_params.position;
-        let mut res = None;
-        let _ = self.queries.lock().is_ok_and(|queries| {
-            if let Ok(lsp_files) = self.lsp_files.lock() {
-                if let Some(index) = lsp_files.get_index(&uri) {
-                    res = lsp_files.query_completion(
-                        index,
-                        &text,
-                        QueryType::Completion,
-                        pos,
-                        &queries,
-                    );
-                } else if let Some(index) = lsp_files.add_file(String::from(&uri)) {
-                    lsp_files.add_tree(index, LangType::Template, &text, None);
-                    res = lsp_files.query_completion(
-                        index,
-                        &text,
-                        QueryType::Completion,
-                        pos,
-                        &queries,
-                    );
-                } else {
-                    res = None;
-                }
-            }
-            true
-        });
-        res
-    }
-
-    fn start_hover(&self, text_params: &TextDocumentPositionParams, uri: String) -> Option<String> {
-        let text = self.document_map.get(&uri)?;
-        let text = text.to_string();
-        let pos = text_params.position;
-        let mut res = None;
-        let _ = self.queries.lock().is_ok_and(|queries| {
-            if let Ok(lsp_files) = self.lsp_files.lock() {
-                if let Some(index) = lsp_files.get_index(&uri) {
-                    res = lsp_files.query_hover(index, &text, QueryType::Completion, pos, &queries)
-                } else if let Some(index) = lsp_files.add_file(String::from(&uri)) {
-                    lsp_files.add_tree(index, LangType::Template, &text, None);
-                    res = lsp_files.query_hover(index, &text, QueryType::Completion, pos, &queries)
-                } else {
-                    res = None;
-                }
-            }
-            true
-        });
-        res
-    }
-
-    fn is_expr(&self, text_params: &CodeActionParams, uri: String) -> Option<String> {
-        let text = self.document_map.get(&uri)?;
-        let text = text.to_string();
-        let pos = text_params.range.start;
-        let mut res = None;
-        let _ = self.queries.lock().is_ok_and(|queries| {
-            if let Ok(lsp_files) = self.lsp_files.lock() {
-                if let Some(index) = lsp_files.get_index(&uri) {
-                    res = lsp_files.code_action(index, &text, QueryType::Completion, pos, &queries)
-                } else if let Some(index) = lsp_files.add_file(String::from(&uri)) {
-                    lsp_files.add_tree(index, LangType::Template, &text, None);
-                    res = lsp_files.code_action(index, &text, QueryType::Completion, pos, &queries)
-                } else {
-                    res = None;
-                }
-            }
-            true
-        });
-        res
-    }
-
-    fn start_definition(&self, params: &TextDocumentPositionParams, uri: String) -> Option<String> {
-        let text = self.document_map.get(&uri)?;
-        let text = text.to_string();
-        let pos = params.position;
-        let mut res = None;
-        let _ = self.queries.lock().is_ok_and(|queries| {
-            if let Ok(lsp_files) = self.lsp_files.lock() {
-                if let Some(index) = lsp_files.get_index(&uri) {
-                    res = lsp_files.query_definition(
-                        index,
-                        &text,
-                        QueryType::Definition,
-                        pos,
-                        &queries,
-                    )
-                } else if let Some(index) = lsp_files.add_file(String::from(&uri)) {
-                    lsp_files.add_tree(index, LangType::Template, &text, None);
-                    res = lsp_files.query_definition(
-                        index,
-                        &text,
-                        QueryType::Definition,
-                        pos,
-                        &queries,
-                    )
-                } else {
-                    res = None;
-                }
-            }
-            true
-        });
-        res
-    }
-
-    async fn publish_tag_diagnostics(
-        &self,
-        diagnostics: HashMap<String, Vec<JinjaVariable>>,
-        file: Option<String>,
-    ) {
-        let mut hm: HashMap<String, Vec<Diagnostic>> = HashMap::new();
-        let mut added = false;
-        for (file, diags) in diagnostics {
-            for diag in diags {
-                added = true;
-                let diagnostic = Diagnostic {
-                    range: Range::new(
-                        Position::new(diag.start.row as u32, diag.start.column as u32),
-                        Position::new(diag.end.row as u32, diag.end.column as u32),
-                    ),
-                    severity: Some(DiagnosticSeverity::WARNING),
-                    message: String::from("This variable is already defined"),
-                    source: Some(String::from("jinja-lsp")),
-                    ..Default::default()
-                };
-                if hm.contains_key(&file) {
-                    let _ = hm.get_mut(&file).is_some_and(|d| {
-                        d.push(diagnostic);
-                        false
-                    });
-                } else {
-                    hm.insert(String::from(&file), vec![diagnostic]);
-                }
-            }
-        }
-
-        for (url, diagnostics) in hm {
-            if let Ok(uri) = Url::parse(&url) {
-                self.client
-                    .publish_diagnostics(uri, diagnostics, None)
-                    .await;
-            }
-        }
-        if let Some(uri) = file {
-            if !added {
-                let uri = Url::parse(&uri).unwrap();
-                self.client.publish_diagnostics(uri, vec![], None).await;
-            }
-        }
-    }
+    commands
 }
 
 #[derive(Default, Debug)]
-pub struct LocalWriter {
+pub struct FileWriter {
     pub content: String,
 }
 
-impl std::io::Write for LocalWriter {
+impl std::io::Write for FileWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if let Ok(b) = std::str::from_utf8(buf) {
             self.content.push_str(b);

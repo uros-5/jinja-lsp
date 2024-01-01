@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
-use tree_sitter::QueryCapture;
+use tree_sitter::{Point, Query, QueryCapture};
 
-use crate::query_helper::CaptureDetails;
+use crate::{
+    config::LangType,
+    query_helper::{CaptureDetails, Queries},
+};
 
 pub trait Capturer {
     fn save_by(
@@ -46,9 +49,6 @@ impl Capturer for JinjaCapturer {
     ) {
         let key = capture_names[capture.index as usize].to_owned();
         let value = self.value(capture, source);
-        if value.parse::<u32>().is_ok() {
-            return;
-        }
         if key == "key_name" {
             self.was_keyword = true;
         } else if self.was_keyword || self.force {
@@ -185,5 +185,85 @@ impl Capturer for JinjaCompletionCapturer {
                 start_position: capture.node.start_position(),
             },
         );
+    }
+}
+
+#[derive(Default)]
+pub struct JinjaVariableCapturer {
+    points: Vec<(Point, Point)>,
+    cnt: u32,
+    force: bool,
+}
+
+impl JinjaVariableCapturer {
+    pub fn force(&mut self) {
+        self.force = true;
+    }
+    pub fn add_point(&mut self, point: (Point, Point)) -> bool {
+        let check = self
+            .points
+            .iter()
+            .find(|item| item.0 == point.0 && item.1 == point.1);
+        if check.is_none() {
+            self.points.push(point);
+            return true;
+        }
+        return false;
+    }
+}
+
+impl Capturer for JinjaVariableCapturer {
+    fn save_by(
+        &mut self,
+        capture: &QueryCapture<'_>,
+        acc: &mut HashMap<String, CaptureDetails>,
+        capture_names: &[String],
+        source: &str,
+    ) {
+        let mut key = capture_names[capture.index as usize].to_owned();
+        let value = self.value(capture, source);
+        if key == "temp_expression" || key == "just_statement" {
+            let identifier = capture.node.child_by_field_name("identifier");
+            if let Some(identifier) = identifier {
+                let to_add =
+                    self.add_point((identifier.start_position(), identifier.end_position()));
+                if to_add {
+                    if self.force {
+                        self.cnt += 1;
+                        key = format!("{}_{}", key, self.cnt);
+                    } else {
+                        key = "key_id".to_string();
+                    }
+                    let value = identifier.utf8_text(source.as_bytes());
+                    if value.is_err() {
+                        return;
+                    }
+
+                    acc.insert(
+                        key,
+                        CaptureDetails {
+                            value: value.unwrap().to_string(),
+                            end_position: identifier.end_position(),
+                            start_position: identifier.start_position(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub fn get_capturer(lang_type: LangType, queries: &Queries) -> (&Query, Box<dyn Capturer>) {
+    match lang_type {
+        LangType::Template => (
+            &queries.jinja_ident_query,
+            Box::new(JinjaCapturer::default()),
+        ),
+        LangType::Backend => {
+            let query = &queries.rust_ident_query;
+            let mut capturer2 = RustCapturer::default();
+            capturer2.force();
+            (query, Box::new(capturer2))
+        }
     }
 }

@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     cell::RefCell,
     collections::HashMap,
     fs::read_to_string,
@@ -6,20 +7,20 @@ use std::{
     sync::{Arc, Mutex, MutexGuard, RwLock},
 };
 
-use dashmap::{DashMap};
+use dashmap::DashMap;
 use ropey::Rope;
 use tower_lsp::lsp_types::Position;
 use tree_sitter::{InputEdit, Point, Range, Tree};
 
 use crate::{
-    capturer::JinjaCapturer,
+    capturer::{get_capturer, Capturer, JinjaCapturer, RustCapturer},
     config::{JinjaConfig, LangType},
     parsers::Parsers,
     query_helper::{
-        query_action, query_completion, query_definition, query_hover, query_props,
-        CaptureDetails, CompletionType, Queries, QueryType,
+        query_action, query_completion, query_definition, query_hover, query_identifiers,
+        query_props, CaptureDetails, CompletionType, Queries, QueryType,
     },
-    server::LocalWriter,
+    server::FileWriter,
 };
 
 #[derive(Clone)]
@@ -100,13 +101,68 @@ impl LspFiles {
             });
     }
 
+    pub fn get_trees_vec(&self, lang_type: LangType) -> Vec<usize> {
+        let trees = self.trees.get(&lang_type).unwrap();
+        let mut all = vec![];
+        for tree in trees.iter().enumerate() {
+            all.push(tree.0);
+        }
+        all
+    }
+
+    pub fn read_tree(
+        &self,
+        index: usize,
+        lang_type: LangType,
+        queries: &Arc<Mutex<Queries>>,
+        document_map: &DashMap<String, Rope>,
+        diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
+    ) -> Option<()> {
+        let uri = self.get_uri(index)?;
+        let rope = document_map.get(&uri)?;
+        let content = rope.value();
+        let mut writter = FileWriter::default();
+        let _ = content.write_to(&mut writter);
+        let content = writter.content;
+        queries.lock().ok().and_then(|queries| -> Option<()> {
+            let trees = self.trees.get(&LangType::Template)?;
+            let tree = trees.get(&index)?;
+            let closest_node = tree.root_node();
+            let trigger_point = Point::new(0, 0);
+            query_identifiers(
+                closest_node,
+                &content,
+                trigger_point,
+                &queries,
+                &self.variables,
+                (index, uri),
+                diags,
+            );
+            None
+        });
+        None
+    }
+
+    pub fn warn_undefined(
+        &self,
+        uri: &String,
+        config: &RwLock<JinjaConfig>,
+        document_map: &DashMap<String, Rope>,
+        queries: &Arc<Mutex<Queries>>,
+        diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
+    ) -> Option<()> {
+        let index = self.get_index(uri)?;
+        self.read_tree(index, LangType::Template, queries, document_map, diags);
+        None
+    }
+
     pub fn read_file(
         &self,
         path: &&Path,
         lang_type: LangType,
         queries: &Arc<Mutex<Queries>>,
         document_map: &DashMap<String, Rope>,
-        diags: &mut HashMap<String, Vec<JinjaVariable>>,
+        diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
     ) -> Option<()> {
         let res = None;
         let mut errors = None;
@@ -183,11 +239,11 @@ impl LspFiles {
         query_completion(root_node, text, trigger_point, query)
     }
 
-    pub fn query_hover(
+    pub fn query_something(
         &self,
         index: usize,
         text: &str,
-        _query_type: QueryType,
+        query_type: QueryType,
         pos: Position,
         query: &Queries,
     ) -> Option<String> {
@@ -195,37 +251,12 @@ impl LspFiles {
         let old_tree = trees.get(&index)?;
         let root_node = old_tree.root_node();
         let trigger_point = Point::new(pos.line as usize, pos.character as usize);
-        query_hover(root_node, text, trigger_point, query)
-    }
-
-    pub fn code_action(
-        &self,
-        index: usize,
-        text: &str,
-        _query_type: QueryType,
-        pos: Position,
-        query: &Queries,
-    ) -> Option<String> {
-        let trees = self.trees.get(&LangType::Template)?;
-        let old_tree = trees.get(&index)?;
-        let root_node = old_tree.root_node();
-        let trigger_point = Point::new(pos.line as usize, pos.character as usize);
-        query_action(root_node, text, trigger_point, query)
-    }
-
-    pub fn query_definition(
-        &self,
-        index: usize,
-        text: &str,
-        _query_type: QueryType,
-        pos: Position,
-        query: &Queries,
-    ) -> Option<String> {
-        let trees = self.trees.get(&LangType::Template)?;
-        let old_tree = trees.get(&index)?;
-        let root_node = old_tree.root_node();
-        let trigger_point = Point::new(pos.line as usize, pos.character as usize);
-        query_definition(root_node, text, trigger_point, query)
+        match query_type {
+            QueryType::Definition => query_definition(root_node, text, trigger_point, query),
+            QueryType::CodeAction => query_action(root_node, text, trigger_point, query),
+            QueryType::Hover => query_hover(root_node, text, trigger_point, query),
+            QueryType::Completion => None,
+        }
     }
 
     pub fn delete_variables(&self, index: usize) {
@@ -238,30 +269,44 @@ impl LspFiles {
         lang_type: LangType,
         text: &str,
         query: &Queries,
-    ) -> Option<Vec<JinjaVariable>> {
-        if lang_type == LangType::Backend {
-            return None;
-        }
+    ) -> Option<Vec<(JinjaVariable, JinjaDiagnostic)>> {
         let trees = self.trees.get(&lang_type).unwrap();
         let tree = trees.get(&index)?;
         let trigger_point = Point::new(0, 0);
         let closest_node = tree.root_node();
-        let query = &query.jinja_ident_query;
-        let capturer = JinjaCapturer::default();
         let mut diags = vec![];
-        let mut variables = vec![];
-        let props = query_props(closest_node, text, trigger_point, query, true, capturer);
-        let mut props: Vec<&CaptureDetails> = props.values().collect();
-        props.sort();
-        for capture in props {
-            let variable = JinjaVariable::from(capture);
-            if !ident_exist(&capture.value, &variables) {
-                variables.push(variable);
-            } else {
-                diags.push(variable);
+        match lang_type {
+            LangType::Backend => {
+                let query = &query.rust_ident_query;
+                let mut capturer = RustCapturer::default();
+                capturer.force();
+                let mut variables = vec![];
+                let props = query_props(closest_node, text, trigger_point, query, true, capturer);
+                let mut props: Vec<&CaptureDetails> = props.values().collect();
+                props.sort();
+                for capture in props {
+                    variables.push(JinjaVariable::from(capture));
+                }
+                self.variables.insert(index, variables);
+            }
+            LangType::Template => {
+                let query = &query.jinja_ident_query;
+                let capturer = JinjaCapturer::default();
+                let mut variables = vec![];
+                let props = query_props(closest_node, text, trigger_point, query, true, capturer);
+                let mut props: Vec<&CaptureDetails> = props.values().collect();
+                props.sort();
+                for capture in props {
+                    let variable = JinjaVariable::from(capture);
+                    if !ident_exist(&capture.value, &variables) {
+                        variables.push(variable);
+                    } else {
+                        diags.push((variable, JinjaDiagnostic::AlreadyDefined));
+                    }
+                }
+                self.variables.insert(index, variables);
             }
         }
-        self.variables.insert(index, variables);
         Some(diags)
     }
 
@@ -271,19 +316,16 @@ impl LspFiles {
         config: &RwLock<JinjaConfig>,
         document_map: &DashMap<String, Rope>,
         queries: &Arc<Mutex<Queries>>,
-        diags: &mut HashMap<String, Vec<JinjaVariable>>,
+        diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
     ) -> Option<()> {
         let path = Path::new(&uri);
         let file = self.get_index(uri)?;
         let res = None;
         if let Ok(config) = config.read() {
             let lang_type = config.file_ext(&path)?;
-            if lang_type == LangType::Backend {
-                return None;
-            }
             let content = document_map.get(uri)?;
             let content = content.value();
-            let mut a = LocalWriter::default();
+            let mut a = FileWriter::default();
             let _ = content.write_to(&mut a);
             let content = a.content;
             let _ = queries.lock().is_ok_and(|queries| {
@@ -296,6 +338,27 @@ impl LspFiles {
             });
         }
         res
+    }
+
+    pub fn get_jinja_variables(
+        &self,
+        name: &str,
+    ) -> Option<HashMap<String, std::vec::Vec<JinjaVariable>>> {
+        let mut all = HashMap::new();
+        let mut added = false;
+        for i in self.variables.iter() {
+            let variables = get_jinja_variables(name, true, &i);
+            if !variables.is_empty() {
+                added = true;
+            }
+            let index = self.get_uri(i.key().to_owned())?;
+            all.insert(index, variables);
+        }
+        if added {
+            Some(all)
+        } else {
+            None
+        }
     }
 }
 
@@ -316,13 +379,12 @@ impl From<&CaptureDetails> for JinjaVariable {
     }
 }
 
-pub fn get_jinja_variable(
+pub fn get_jinja_variables(
     name: &str,
     same: bool,
     variables: &Vec<JinjaVariable>,
-) -> Option<Vec<JinjaVariable>> {
+) -> Vec<JinjaVariable> {
     let mut new = vec![];
-    let mut res = None;
     for variable in variables {
         if variable.name == name {
             new.push(variable.clone());
@@ -331,14 +393,27 @@ pub fn get_jinja_variable(
             }
         }
     }
-    if !variables.is_empty() {
-        res = Some(new);
-    }
-    res
+    new
 }
 
 /// Used only by jinja variables
-pub fn ident_exist(name: &str, variables: &Vec<JinjaVariable>) -> bool {
+pub fn ident_exist(name: &str, variables: &[JinjaVariable]) -> bool {
     let ident = variables.iter().find(|item| item.name == name);
     ident.is_some()
+}
+
+pub enum JinjaDiagnostic {
+    AlreadyDefined,
+    DefinedSomewhere,
+    Undefined,
+}
+
+impl ToString for JinjaDiagnostic {
+    fn to_string(&self) -> String {
+        match self {
+            JinjaDiagnostic::AlreadyDefined => String::from("This variable is already defined"),
+            JinjaDiagnostic::Undefined => String::from("Undefined variable"),
+            JinjaDiagnostic::DefinedSomewhere => String::from("Variable is defined in other file."),
+        }
+    }
 }

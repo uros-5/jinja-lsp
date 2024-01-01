@@ -5,10 +5,10 @@ pub static JINJA_DEF: &str = r#"
     (
       (keyword) @key_name
       (identifier) @key_id
+      (#not-match? @key_id "(^\\d+$)")
     )    
   ]
-
-      (#any-of? @key_name "set" "macro" "for" "with")
+  (#match? @key_name "(set|macro|for|with)")
 )
 "#;
 
@@ -72,9 +72,11 @@ pub static GOTO_DEF_JINJA: &str = r#"
 ( 
    [	
     (expression
-        (identifier) @key_id
+        (expression_begin)
+        identifier: (identifier) @key_id
         (operator) @pipe
         (identifier)? @filter
+        (#not-eq? @filter @key_id) 
         (#match? @pipe "|")
     ) @expr_with_pipes
 
@@ -82,7 +84,7 @@ pub static GOTO_DEF_JINJA: &str = r#"
       	(statement
           	_
               (keyword) @key_name
-              (identifier)? @key_id
+              identifier: (identifier)? @key_id
               (#match? @key_name "(if|in|and|or|elif)")
               (_)
           ) 
@@ -95,4 +97,32 @@ pub static GOTO_DEF_JINJA: &str = r#"
 
     ]
   )
+"#;
+
+pub static TEMP: &str = r#"
+(
+    [
+        (expression
+            (
+                (expression_begin)
+                identifier: (identifier) @key_id
+            )
+            (operator)? @pipe
+            (identifier)? @filter
+            (#not-eq? @filter @key_id) 
+            (#match? @pipe "|")
+        ) @temp_expression
+
+        (
+          	(statement
+            	_
+                  (keyword) @key_name
+                  identifier: (identifier) @key_id
+                  (#match? @key_name "(if|in|and|or|elif)")
+                  _
+              ) 
+        ) @just_statement
+
+    ]
+)
 "#;

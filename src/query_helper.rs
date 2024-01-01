@@ -1,10 +1,16 @@
 use std::collections::HashMap;
 
+use dashmap::DashMap;
 use tree_sitter::{Node, Point, Query, QueryCursor};
 
 use crate::{
-    capturer::{Capturer, JinjaCompletionCapturer},
-    queries::{GOTO_DEF_JINJA, JINJA_COMPLETION, JINJA_DEF, JINJA_REF, RUST_DEF},
+    capturer::{
+        Capturer, JinjaCapturer, JinjaCapturer2, JinjaCompletionCapturer, JinjaVariableCapturer,
+        RustCapturer,
+    },
+    config::LangType,
+    lsp_files::{get_jinja_variables, ident_exist, JinjaDiagnostic, JinjaVariable},
+    queries::{GOTO_DEF_JINJA, JINJA_COMPLETION, JINJA_DEF, JINJA_REF, RUST_DEF, TEMP},
 };
 
 #[derive(Debug)]
@@ -14,6 +20,7 @@ pub struct Queries {
     pub jinja_completion_query: Query,
     pub jinja_goto_def_query: Query,
     pub rust_ident_query: Query,
+    pub temp: Query,
 }
 
 impl Clone for Queries {
@@ -32,6 +39,7 @@ impl Default for Queries {
             jinja_completion_query: Query::new(tree_sitter_jinja2::language(), JINJA_COMPLETION)
                 .unwrap(),
             rust_ident_query: Query::new(tree_sitter_rust::language(), RUST_DEF).unwrap(),
+            temp: Query::new(tree_sitter_jinja2::language(), TEMP).unwrap(),
         }
     }
 }
@@ -40,6 +48,8 @@ impl Default for Queries {
 pub enum QueryType {
     Completion,
     Definition,
+    CodeAction,
+    Hover,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -53,6 +63,54 @@ pub struct CaptureDetails {
     pub start_position: Point,
     pub end_position: Point,
     pub value: String,
+}
+
+pub fn query_identifiers(
+    root: Node<'_>,
+    source: &str,
+    trigger_point: Point,
+    query: &Queries,
+    variables: &DashMap<usize, Vec<JinjaVariable>>,
+    index: (usize, String),
+    diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
+) -> Option<String> {
+    let closest_node = root.descendant_for_point_range(trigger_point, trigger_point)?;
+    let element = find_element_referent_to_current_node(closest_node)?;
+    let mut capturer = JinjaVariableCapturer::default();
+    capturer.force();
+    let props = query_props(element, source, trigger_point, &query.temp, true, capturer);
+    let props: Vec<&CaptureDetails> = props.values().collect();
+    for capture in props {
+        let by_file = variables.get(&index.0)?;
+        let one_file_variables = get_jinja_variables(&capture.value, false, &by_file);
+        let variable = JinjaVariable::from(capture);
+        let mut err_type = JinjaDiagnostic::Undefined;
+        let mut to_warn = false;
+
+        if one_file_variables.is_empty() {
+            for file in variables {
+                let temp = get_jinja_variables(&capture.value, true, &file);
+                if !temp.is_empty() {
+                    err_type = JinjaDiagnostic::DefinedSomewhere;
+                    break;
+                }
+            }
+            to_warn = true;
+        } else {
+            let definition = one_file_variables.first()?;
+            if &variable < definition {
+                to_warn = true;
+            }
+        }
+        if to_warn {
+            if diags.get(&index.1).is_none() {
+                diags.insert(index.1.to_string(), vec![(variable, err_type)]);
+            } else {
+                diags.get_mut(&index.1).unwrap().push((variable, err_type));
+            }
+        }
+    }
+    None
 }
 
 pub fn query_hover(
@@ -111,35 +169,11 @@ pub fn query_definition(
 ) -> Option<String> {
     let closest_node = root.descendant_for_point_range(trigger_point, trigger_point)?;
     let element = find_element_referent_to_current_node(closest_node)?;
-    let capturer = JinjaCompletionCapturer::default();
-    let props = query_props(
-        element,
-        source,
-        trigger_point,
-        &query.jinja_goto_def_query,
-        false,
-        capturer,
-    );
+    let capturer = JinjaVariableCapturer::default();
+    let props = query_props(element, source, trigger_point, &query.temp, false, capturer);
     let id = props.get("key_id")?;
-    let expr_with_pipes = props.get("expr_with_pipes");
-    let just_statement = props.get("just_statement");
-    let basic_expr = props.get("basic_expr");
-    if expr_with_pipes.is_some()
-        && trigger_point >= id.start_position
-        && trigger_point <= id.end_position
-    {
-        return Some(id.value.to_string());
-    }
-    if just_statement.is_some()
-        && trigger_point >= id.start_position
-        && trigger_point <= id.end_position
-    {
-        return Some(id.value.to_string());
-    }
-    if basic_expr.is_some()
-        && trigger_point >= id.start_position
-        && trigger_point <= id.end_position
-    {
+
+    if trigger_point >= id.start_position && trigger_point <= id.end_position {
         return Some(id.value.to_string());
     }
     None
@@ -264,7 +298,7 @@ mod tests1 {
     use tree_sitter::{Parser, Point};
 
     use crate::{
-        capturer::{JinjaCapturer, JinjaCapturer2, RustCapturer},
+        capturer::{JinjaCapturer, JinjaCapturer2, JinjaVariableCapturer, RustCapturer},
         query_helper::{query_props, CompletionType, Queries},
     };
 
@@ -287,7 +321,7 @@ mod tests1 {
 
         parser
             .set_language(language)
-            .expect("could not load jinja grammar");
+            .expect("could not load rust grammar");
 
         parser.parse(text, None).expect("not to fail")
     }
@@ -346,9 +380,9 @@ mod tests1 {
         let case = r#"
         {{ obj.abc obj2.abc2 }}
 
-        {{ obj.field.something.something == obj2.something }}
+        {{ obj3.field.something.something == obj4.something }}
 
-        {% if obj.field -%}
+        {% if obj5.field -%}
         111 {{ abc == def.abc }}
         {% endif %}
         "#;
@@ -358,6 +392,29 @@ mod tests1 {
         let query = Queries::default();
         let query = &query.jinja_ref_query;
         let mut capturer = JinjaCapturer2::default();
+        capturer.force();
+        let props = query_props(closest_node, case, trigger_point, query, true, capturer);
+        assert_eq!(props.len(), 6);
+    }
+
+    #[test]
+    fn find_identifiers_quick() {
+        let case = r#"
+        <p> {{ something }}</p>
+        <p hx-swap="innerHTML"> {{ something | some_filter(a, b,c) }} </p>            
+        {% for i in something -%}
+            {{ i }}
+        {%- endfor %}
+        {% if something %}
+            {{ something }}
+        {% endif %}
+        "#;
+        let tree = prepare_jinja_tree(case);
+        let trigger_point = Point::new(0, 0);
+        let closest_node = tree.root_node();
+        let query = Queries::default();
+        let query = &query.temp;
+        let mut capturer = JinjaVariableCapturer::default();
         capturer.force();
         let props = query_props(closest_node, case, trigger_point, query, true, capturer);
         assert_eq!(props.len(), 6);

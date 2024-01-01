@@ -18,7 +18,7 @@ im-rc = "15.0.0"
 tree-sitter = "0.20.10"
 walkdir = "2.4.0"
 anyhow = "1.0.75"
-tree-sitter-jinja2 = "0.0.3"
+tree-sitter-jinja2 = "0.0.5"
 tree-sitter-rust = "0.20.4"
 
 [profile.dev]

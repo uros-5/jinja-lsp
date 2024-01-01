@@ -1,6 +1,8 @@
 use ropey::Rope;
-use tower_lsp::lsp_types::Range;
+use tower_lsp::lsp_types::{Position, Range};
 use tree_sitter::{InputEdit, Point};
+
+use crate::lsp_files::JinjaVariable;
 
 pub trait ToInputEdit {
     fn to_point(&self) -> (Point, Point);
@@ -37,4 +39,11 @@ impl ToInputEdit for Range {
             new_end_position,
         }
     }
+}
+
+pub fn to_position(variable: &JinjaVariable) -> (Position, Position) {
+    (
+        Position::new(variable.start.row as u32, variable.start.column as u32),
+        Position::new(variable.end.row as u32, variable.end.column as u32),
+    )
 }

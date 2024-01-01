@@ -5,11 +5,9 @@ use tree_sitter::{Node, Point, Query, QueryCursor};
 
 use crate::{
     capturer::{
-        Capturer, JinjaCapturer, JinjaCapturer2, JinjaCompletionCapturer, JinjaVariableCapturer,
-        RustCapturer,
+        Capturer, JinjaCompletionCapturer, JinjaVariableCapturer,
     },
-    config::LangType,
-    lsp_files::{get_jinja_variables, ident_exist, JinjaDiagnostic, JinjaVariable},
+    lsp_files::{get_jinja_variables, JinjaDiagnostic, JinjaVariable},
     queries::{GOTO_DEF_JINJA, JINJA_COMPLETION, JINJA_DEF, JINJA_REF, RUST_DEF, TEMP},
 };
 

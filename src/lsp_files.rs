@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     cell::RefCell,
     collections::HashMap,
     fs::read_to_string,
@@ -13,7 +12,7 @@ use tower_lsp::lsp_types::Position;
 use tree_sitter::{InputEdit, Point, Range, Tree};
 
 use crate::{
-    capturer::{get_capturer, Capturer, JinjaCapturer, RustCapturer},
+    capturer::{JinjaCapturer, RustCapturer},
     config::{JinjaConfig, LangType},
     parsers::Parsers,
     query_helper::{
@@ -113,7 +112,7 @@ impl LspFiles {
     pub fn read_tree(
         &self,
         index: usize,
-        lang_type: LangType,
+        _lang_type: LangType,
         queries: &Arc<Mutex<Queries>>,
         document_map: &DashMap<String, Rope>,
         diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
@@ -146,7 +145,7 @@ impl LspFiles {
     pub fn warn_undefined(
         &self,
         uri: &String,
-        config: &RwLock<JinjaConfig>,
+        _config: &RwLock<JinjaConfig>,
         document_map: &DashMap<String, Rope>,
         queries: &Arc<Mutex<Queries>>,
         diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
@@ -359,6 +358,24 @@ impl LspFiles {
         } else {
             None
         }
+    }
+
+    pub fn get_all_variables(&self, current_file: &String) -> Option<Vec<(String, String)>> {
+        let mut all = vec![];
+        let index = self.get_index(current_file)?;
+        let variables = self.variables.get(&index)?;
+        if variables.is_empty() {
+            return None;
+        }
+        for i in variables.value() {
+            all.push(("this file".to_string(), i.name.to_string()));
+        }
+        for i in self.variables.iter() {
+            for variable in i.value() {
+                all.push(("other file".to_string(), variable.name.to_string()));
+            }
+        }
+        Some(all)
     }
 }
 

@@ -34,14 +34,26 @@ pub enum JinjaKeyword {
     NoKeyword,
 }
 
-pub enum JinjaId {
-    For,
+pub enum DataType {
     Macro,
     MacroParameter,
-    Block,
-    Set,
-    Import,
-    With,
+    Variable,
+}
+
+pub struct JinjaVariable {
+    pub name: String,
+    pub location: (Point, Point),
+    pub data_type: DataType,
+}
+
+impl JinjaVariable {
+    pub fn new(name: &String, location: (Point, Point), data_type: DataType) -> Self {
+        Self {
+            name: String::from(name),
+            location,
+            data_type,
+        }
+    }
 }
 
 impl JinjaKeyword {
@@ -124,6 +136,42 @@ impl JinjaKeyword {
             _ => Some(()),
         }
     }
+
+    pub fn get_data(&self, all: &mut Vec<JinjaVariable>, data: &IdentifierState) {
+        match self {
+            JinjaKeyword::For { key, value, .. } => {
+                let key = JinjaVariable::new(key, data.location, DataType::Variable);
+                all.push(key);
+                if !value.is_empty() {
+                    let value = JinjaVariable::new(value, data.location, DataType::Variable);
+                    all.push(value);
+                }
+            }
+            JinjaKeyword::Macro { name, parameters } => {
+                let name = JinjaVariable::new(name, data.location, DataType::Macro);
+                all.push(name);
+                for param in parameters {
+                    let param = JinjaVariable::new(&param.0, param.1, DataType::Macro);
+                    all.push(param);
+                }
+            }
+            JinjaKeyword::Block { name } => {}
+            JinjaKeyword::Set { name, equals } => {
+                let name = JinjaVariable::new(name, data.location, DataType::Variable);
+                all.push(name);
+            }
+            JinjaKeyword::From { name, import } => {
+                //
+            }
+            JinjaKeyword::With { name } => {
+                let name = JinjaVariable::new(name, data.location, DataType::Variable);
+                all.push(name);
+            }
+            JinjaKeyword::NoKeyword => {
+                //
+            }
+        }
+    }
 }
 
 pub static KEYWORDS: [&str; 7] = ["for", "macro", "block", "set", "from", "import", "with"];
@@ -165,8 +213,6 @@ impl IdentifierState {
             }
         }
     }
-
-    pub fn iter_data(&self) {}
 
     pub fn add_keyword(&mut self, child: Node<'_>, source: &str) {
         if self.have_keyword || !self.statement_started || self.statement_ended {

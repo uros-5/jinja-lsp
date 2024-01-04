@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use tree_sitter::{Node, Point, QueryCapture};
 
-use crate::tree_builder::{IdentifierState, JinjaVariable};
+use crate::{
+    test_queries::CompletionType,
+    tree_builder::{IdentifierState, JinjaVariable},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CaptureDetails {
@@ -78,6 +81,8 @@ pub struct JinjaObjectCapturer {
     objects: Vec<JinjaObject>,
     dot: (Point, Point),
     pipe: (Point, Point),
+    expr: (Point, Point),
+    ident: (Point, Point),
 }
 
 impl JinjaObjectCapturer {
@@ -85,18 +90,35 @@ impl JinjaObjectCapturer {
         self.objects.clone()
     }
 
-    fn add_dot(&mut self, capture: &QueryCapture<'_>, dot: bool) {
+    fn add_operator(&mut self, capture: &QueryCapture<'_>, dot: u8) {
         let start = capture.node.start_position();
         let end = capture.node.end_position();
-        if dot {
+        if dot == 0 {
             self.dot = (start, end);
-        } else {
+        } else if dot == 1 {
             self.pipe = (start, end);
+        } else if dot == 2 {
+            self.expr = (start, end);
         }
     }
-}
 
-impl JinjaObjectCapturer {
+    pub fn in_pipe(&self, trigger_point: Point) -> bool {
+        trigger_point >= self.pipe.0 && trigger_point <= self.pipe.1
+    }
+
+    pub fn in_expr(&self, trigger_point: Point) -> bool {
+        trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.1
+    }
+
+    pub fn completion(&self, trigger_point: Point) -> Option<CompletionType> {
+        if self.in_pipe(trigger_point) {
+            return Some(CompletionType::Pipe);
+        } else if self.in_expr(trigger_point) {
+            return Some(CompletionType::Identifier);
+        }
+        None
+    }
+
     pub fn build_object(&mut self, capture: &QueryCapture<'_>, source: &str) {
         let value = capture.node.utf8_text(source.as_bytes());
         let start = capture.node.start_position();
@@ -108,18 +130,21 @@ impl JinjaObjectCapturer {
                     .last_mut()
                     .map(|last| {
                         last.fields.push((String::from(value), (start, end)));
+                        self.ident = (start, end);
                     })
                     .is_none()
                 {
                     true => {
                         self.objects
                             .push(JinjaObject::new(String::from(value), start, end));
+                        self.ident = (start, end);
                     }
                     false => (),
                 }
             } else {
                 self.objects
                     .push(JinjaObject::new(String::from(value), start, end));
+                self.ident = (start, end);
             }
         }
     }
@@ -137,9 +162,11 @@ impl Capturer for JinjaObjectCapturer {
         if key == "just_id" {
             self.build_object(capture, source);
         } else if key == "dot" {
-            self.add_dot(capture, true);
+            self.add_operator(capture, 0);
         } else if key == "pipe" {
-            self.add_dot(capture, false);
+            self.add_operator(capture, 1);
+        } else if key == "expr" {
+            self.add_operator(capture, 2);
         }
     }
 }

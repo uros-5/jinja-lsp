@@ -4,11 +4,13 @@ mod query_tests {
     use tree_sitter::{Parser, Point};
 
     use crate::{
-        capturer::{JinjaInitCapturer, JinjaObjectCapturer, RustCapturer},
+        capturer::{
+            init::JinjaInitCapturer,
+            object::{CompletionType, JinjaObjectCapturer},
+            rust::RustCapturer,
+        },
         queries::{query_props, Queries},
     };
-
-    use super::CompletionType;
 
     fn prepare_jinja_tree(text: &str) -> tree_sitter::Tree {
         let language = tree_sitter_jinja2::language();
@@ -133,6 +135,7 @@ mod query_tests {
             let b = context!{name, username => "username" } 
             let price = 100;
             let c = context!{ price };
+            jinja.add_filter("running_locally", true);        
         "#;
 
         let tree = prepare_rust_tree(case);
@@ -140,15 +143,17 @@ mod query_tests {
         let closest_node = tree.root_node();
         let query = Queries::default();
         let query = &query.rust_idents;
-        let mut capturer = RustCapturer::default();
+        let capturer = RustCapturer::default();
         let props = query_props(closest_node, case, trigger_point, query, true, capturer);
-        let macros = props.show();
+        let macros = props.macros();
         assert_eq!(macros.len(), 3);
         let mut count = 0;
         for context in macros {
             count += context.1.show().len();
         }
-        assert_eq!(count, 5);
+        let variables = props.variables();
+        count += variables.len();
+        assert_eq!(count, 6);
     }
 
     #[test]
@@ -168,25 +173,26 @@ mod query_tests {
             (Point::new(1, 27), Some(CompletionType::Pipe)),
             (Point::new(1, 48), None),
             (Point::new(1, 40), Some(CompletionType::Pipe)),
-            (Point::new(1, 50), None),
-            (Point::new(3, 18), Some(CompletionType::Identifier)),
+            (Point::new(1, 50), Some(CompletionType::Identifier)),
+            (Point::new(3, 18), None),
             (Point::new(4, 20), None),
             (Point::new(3, 22), None),
             (Point::new(8, 15), Some(CompletionType::Identifier)),
-            (Point::new(9, 18), None),
+            (Point::new(9, 18), Some(CompletionType::Identifier)),
         ];
         for case in cases {
             let tree = prepare_jinja_tree(source);
             let trigger_point = case.0;
             let closest_node = tree.root_node();
             let query = Queries::default();
+
+            let query = &query.jinja_idents;
+            let capturer = JinjaObjectCapturer::default();
+            let props = query_props(closest_node, source, trigger_point, query, false, capturer);
+            assert_eq!(props.completion(trigger_point), case.1);
+
             // let compl = query_completion(closest_node, source, trigger_point, &query);
             // assert_eq!(compl, case.1);
         }
     }
-}
-
-pub enum CompletionType {
-    Pipe,
-    Identifier,
 }

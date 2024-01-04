@@ -46,9 +46,8 @@ pub fn query_props<T: Capturer>(
                 .iter()
                 .filter(|capture| all || capture.node.start_position() <= trigger_point)
         })
-        .fold(HashMap::new(), |mut acc, capture| {
-            capturer.save_by(capture, &mut acc, capture_names, source);
-            acc
+        .for_each(|capture| {
+            capturer.save_by(capture, capture_names, source);
         });
     capturer
 }
@@ -93,16 +92,35 @@ pub static OBJECTS: &str = r#"
         (#match? @pipe "\\|")
       )
 
+      (expression) @expr
+
   ]
 )
 "#;
 
 pub static RUST: &str = r#"
-(macro_invocation
-	(identifier) @context
-    (token_tree
-    	(identifier) @key_id
-    )
-    (#eq? @context "context")
-) @context_macro  
+([
+
+    (macro_invocation
+    	(identifier) @context
+        (token_tree
+        	(identifier) @key_id
+        )
+        (#eq? @context "context")
+    ) @context_macro 
+
+    (
+    	(field_expression
+        	(identifier) @jinja
+            (field_identifier) @method
+        )
+        (arguments
+        	(string_literal) @name
+        )
+    
+        (#eq? @jinja "jinja")
+        (#match? @method "^(add_global|add_filter|add_function)$")
+    
+    ) @function
+])
 "#;

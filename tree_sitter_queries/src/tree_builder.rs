@@ -34,12 +34,17 @@ pub enum JinjaKeyword {
     NoKeyword,
 }
 
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum DataType {
     Macro,
     MacroParameter,
     Variable,
+    BackendVariable,
+    WithVariable,
+    Block,
 }
 
+#[derive(Clone, Debug)]
 pub struct JinjaVariable {
     pub name: String,
     pub location: (Point, Point),
@@ -151,11 +156,14 @@ impl JinjaKeyword {
                 let name = JinjaVariable::new(name, data.location, DataType::Macro);
                 all.push(name);
                 for param in parameters {
-                    let param = JinjaVariable::new(&param.0, param.1, DataType::Macro);
+                    let param = JinjaVariable::new(&param.0, param.1, DataType::MacroParameter);
                     all.push(param);
                 }
             }
-            JinjaKeyword::Block { name } => {}
+            JinjaKeyword::Block { name } => {
+                let name = JinjaVariable::new(name, data.location, DataType::Block);
+                all.push(name);
+            }
             JinjaKeyword::Set { name, equals } => {
                 let name = JinjaVariable::new(name, data.location, DataType::Variable);
                 all.push(name);
@@ -164,7 +172,7 @@ impl JinjaKeyword {
                 //
             }
             JinjaKeyword::With { name } => {
-                let name = JinjaVariable::new(name, data.location, DataType::Variable);
+                let name = JinjaVariable::new(name, data.location, DataType::WithVariable);
                 all.push(name);
             }
             JinjaKeyword::NoKeyword => {
@@ -315,6 +323,20 @@ impl TryFrom<&str> for JinjaKeyword {
         match keyword.is_none() {
             true => Err(()),
             false => Ok(keyword.unwrap()),
+        }
+    }
+}
+
+pub enum JinjaDiagnostic {
+    DefinedSomewhere,
+    Undefined,
+}
+
+impl ToString for JinjaDiagnostic {
+    fn to_string(&self) -> String {
+        match self {
+            JinjaDiagnostic::Undefined => String::from("Undefined variable"),
+            JinjaDiagnostic::DefinedSomewhere => String::from("Variable is defined in other file."),
         }
     }
 }

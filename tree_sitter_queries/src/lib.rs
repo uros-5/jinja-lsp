@@ -1,4 +1,5 @@
 pub mod capturer;
+pub mod lsp_helper;
 pub mod parsers;
 pub mod queries;
 pub mod test_queries;

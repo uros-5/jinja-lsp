@@ -40,7 +40,7 @@ impl JinjaObjectCapturer {
 
     pub fn completion(&self, trigger_point: Point) -> Option<CompletionType> {
         if self.in_pipe(trigger_point) {
-            return Some(CompletionType::Pipe);
+            return Some(CompletionType::Filter);
         } else if self.in_expr(trigger_point) {
             return Some(CompletionType::Identifier);
         }
@@ -95,9 +95,9 @@ impl Capturer for JinjaObjectCapturer {
 
 #[derive(Default, Debug, Clone)]
 pub struct JinjaObject {
-    name: String,
-    location: (Point, Point),
-    fields: Vec<(String, (Point, Point))>,
+    pub location: (Point, Point),
+    pub name: String,
+    pub fields: Vec<(String, (Point, Point))>,
 }
 
 impl JinjaObject {
@@ -116,6 +116,6 @@ impl JinjaObject {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum CompletionType {
-    Pipe,
+    Filter,
     Identifier,
 }

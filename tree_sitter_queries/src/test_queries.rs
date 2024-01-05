@@ -100,9 +100,6 @@ mod query_tests {
         let query = &query.jinja_idents;
         let mut capturer = JinjaObjectCapturer::default();
         let props = query_props(closest_node, case, trigger_point, query, true, capturer);
-        // for i in props.show() {
-        //     dbg!(i);
-        // }
         assert_eq!(props.show().len(), 7);
     }
 
@@ -149,7 +146,7 @@ mod query_tests {
         assert_eq!(macros.len(), 3);
         let mut count = 0;
         for context in macros {
-            count += context.1.show().len();
+            count += context.1.variables().len();
         }
         let variables = props.variables();
         count += variables.len();
@@ -170,9 +167,9 @@ mod query_tests {
             {{ "|" }}
         "#;
         let cases = [
-            (Point::new(1, 27), Some(CompletionType::Pipe)),
+            (Point::new(1, 27), Some(CompletionType::Filter)),
             (Point::new(1, 48), None),
-            (Point::new(1, 40), Some(CompletionType::Pipe)),
+            (Point::new(1, 40), Some(CompletionType::Filter)),
             (Point::new(1, 50), Some(CompletionType::Identifier)),
             (Point::new(3, 18), None),
             (Point::new(4, 20), None),
@@ -190,9 +187,6 @@ mod query_tests {
             let capturer = JinjaObjectCapturer::default();
             let props = query_props(closest_node, source, trigger_point, query, false, capturer);
             assert_eq!(props.completion(trigger_point), case.1);
-
-            // let compl = query_completion(closest_node, source, trigger_point, &query);
-            // assert_eq!(compl, case.1);
         }
     }
 }

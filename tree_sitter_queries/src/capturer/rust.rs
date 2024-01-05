@@ -6,20 +6,20 @@ use tree_sitter::{Point, QueryCapture};
 use super::{CaptureDetails, Capturer};
 
 #[derive(Default, Debug, Clone)]
-pub struct RustMacro {
+pub struct RustVariables {
     variables: HashMap<String, (Point, Point)>,
     id: usize,
 }
 
-impl RustMacro {
-    pub fn show(&self) -> &HashMap<String, (Point, Point)> {
+impl RustVariables {
+    pub fn variables(&self) -> &HashMap<String, (Point, Point)> {
         &self.variables
     }
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct RustCapturer {
-    macros: HashMap<usize, RustMacro>,
+    macros: HashMap<usize, RustVariables>,
     variables: Vec<(String, (Point, Point))>,
 }
 
@@ -27,7 +27,7 @@ impl RustCapturer {
     pub fn add_macro(&mut self, capture: &QueryCapture<'_>, source: &str) {
         let id = capture.node.id();
         if self.macros.get(&id).is_none() {
-            let mut context_macro = RustMacro::default();
+            let mut context_macro = RustVariables::default();
             let mut walker = capture.node.walk();
             let children = capture.node.children(&mut walker);
             let mut current = 0;
@@ -51,7 +51,7 @@ impl RustCapturer {
     pub fn check_token_tree(
         &mut self,
         node: Node<'_>,
-        context_macro: &mut RustMacro,
+        context_macro: &mut RustVariables,
         source: &str,
     ) {
         let mut walker = node.walk();
@@ -70,7 +70,7 @@ impl RustCapturer {
         }
     }
 
-    pub fn macros(&self) -> &HashMap<usize, RustMacro> {
+    pub fn macros(&self) -> &HashMap<usize, RustVariables> {
         &self.macros
     }
 

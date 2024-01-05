@@ -10,4 +10,5 @@ tree-sitter-jinja2 = "0.0.5"
 tree-sitter-rust = "0.20.4"
 dashmap = "5.1.0"
 tower-lsp = { version = "0.20.0", features = ["proposed"] }
+ropey = "1.5.0"
 

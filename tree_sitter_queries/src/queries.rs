@@ -60,7 +60,7 @@ pub static INIT: &str = r#"
           (statement_begin)
           (keyword)
           (identifier) @variable
-          (#not-match? @variable "\\d")
+          (#not-match? @variable "^(\\d)")
           _
         ) @start_statement
         

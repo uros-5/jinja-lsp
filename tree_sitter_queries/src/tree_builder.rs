@@ -34,7 +34,7 @@ pub enum JinjaKeyword {
     NoKeyword,
 }
 
-#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DataType {
     Macro,
     MacroParameter,
@@ -44,10 +44,10 @@ pub enum DataType {
     Block,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JinjaVariable {
-    pub name: String,
     pub location: (Point, Point),
+    pub name: String,
     pub data_type: DataType,
 }
 

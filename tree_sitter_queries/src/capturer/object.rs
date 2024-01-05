@@ -38,6 +38,20 @@ impl JinjaObjectCapturer {
         trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.1
     }
 
+    pub fn is_hover(&self, trigger_point: Point) -> bool {
+        trigger_point >= self.ident.0
+            && trigger_point <= self.ident.1
+            && self.pipe.1 == self.ident.0
+    }
+
+    pub fn is_ident(&self, trigger_point: Point) -> Option<String> {
+        if trigger_point >= self.ident.0 && trigger_point <= self.ident.1 {
+            self.objects.last().map(|last| last.name.to_string())
+        } else {
+            None
+        }
+    }
+
     pub fn completion(&self, trigger_point: Point) -> Option<CompletionType> {
         if self.in_pipe(trigger_point) {
             return Some(CompletionType::Filter);
@@ -75,6 +89,10 @@ impl JinjaObjectCapturer {
                 self.ident = (start, end);
             }
         }
+    }
+
+    pub fn get_last_id(&self) -> Option<String> {
+        self.objects.last().map(|last| last.name.to_string())
     }
 }
 

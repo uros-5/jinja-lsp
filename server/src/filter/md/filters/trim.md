@@ -1,0 +1,4 @@
+**trim**
+
+Trims a value
+

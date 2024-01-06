@@ -42,8 +42,7 @@ It's recommended to reset variables on server in case you rename/delete file.
 
 Quickly jump to definition. Works for Rust identifiers as well. 
 
-<video src=".github/jinja-lsp.mp4"></video>
-
+https://github.com/uros-5/jinja-lsp/assets/59397844/015e47b4-b6f6-47c0-8504-5ce79ebafb00
 
 ## Configuration
 
@@ -60,6 +59,10 @@ Helix configuration
 command = "jinja-lsp"
 config = { templates = "./templates", backend = ["./src"], lang = "rust"}
 timeout = 5
+
+
+
+
 
 [[language]]
 name = "jinja"

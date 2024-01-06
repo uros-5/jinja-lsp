@@ -8,7 +8,7 @@ use std::{
 use dashmap::DashMap;
 use ropey::Rope;
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionParams, GotoDefinitionParams,
+    CodeActionParams, CompletionItem, CompletionItemKind, CompletionParams, GotoDefinitionParams,
     GotoDefinitionResponse, HoverParams, Location, Position, Range, Url,
 };
 use tree_sitter::{InputEdit, Point, Tree};
@@ -404,6 +404,37 @@ impl LspFiles {
         });
 
         res
+    }
+
+    pub fn code_action(
+        &self,
+        action_params: CodeActionParams,
+        document_map: &DashMap<String, Rope>,
+    ) -> Option<bool> {
+        let uri = action_params.text_document.uri.to_string();
+        let row = action_params.range.start.line;
+        let column = action_params.range.start.character;
+        let point = Point::new(row as usize, column as usize);
+        let trees = self.trees.get(&LangType::Template)?;
+        let tree = trees.get(&uri)?;
+        let closest_node = tree.root_node();
+        let mut current_ident = String::new();
+        self.queries.lock().ok().and_then(|queries| {
+            let query = &queries.jinja_idents;
+            let capturer = JinjaObjectCapturer::default();
+            let doc = document_map.get(&uri)?;
+            let mut writter = FileWriter::default();
+            let _ = doc.write_to(&mut writter);
+            let props = query_props(
+                closest_node,
+                &writter.content,
+                point,
+                query,
+                false,
+                capturer,
+            );
+            Some(props.in_expr(point))
+        })
     }
 
     pub fn get_variables(

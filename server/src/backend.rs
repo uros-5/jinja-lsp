@@ -33,7 +33,7 @@ use tree_sitter_queries::{
 };
 
 use crate::{
-    config::{config_exist, read_config, JinjaConfig},
+    config::{config_exist, read_config, walkdir, JinjaConfig},
     filter::{init_filter_completions, FilterCompletion},
     lsp_files::{FileWriter, LspFiles},
 };
@@ -275,11 +275,24 @@ impl LanguageServer for Backend {
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        Ok(None)
+        let uri = &params.text_document.uri.clone();
+        let lang_type = self.get_lang_type(uri.as_str());
+        let can_def = lang_type.map_or(false, |lang_type| lang_type == LangType::Template);
+        if !can_def {
+            return Ok(None);
+        }
+        let mut res = None;
+        let code_action = self.start_code_action(params);
+        if let Some(code_action) = code_action {
+            if code_action {
+                res = Some(code_actions());
+            }
+        }
+        Ok(res)
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        Ok(None)
+        Ok(self.start_command(params).await)
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -287,6 +300,25 @@ impl LanguageServer for Backend {
     }
 }
 
+pub fn code_actions() -> Vec<CodeActionOrCommand> {
+    let mut commands = vec![];
+    for command in [
+        ("Reset variables", "reset_variables"),
+        ("Warn about unused", "warn"),
+    ] {
+        commands.push(CodeActionOrCommand::CodeAction(CodeAction {
+            title: command.0.to_string(),
+            kind: Some(CodeActionKind::EMPTY),
+            command: Some(Command::new(
+                command.1.to_string(),
+                command.1.to_string(),
+                None,
+            )),
+            ..Default::default()
+        }));
+    }
+    commands
+}
 impl Backend {
     pub fn new(client: Client) -> Self {
         let document_map = DashMap::new();
@@ -430,5 +462,33 @@ impl Backend {
             .lock()
             .ok()
             .and_then(|lsp_files| lsp_files.goto_definition(params, &self.document_map))
+    }
+
+    pub fn start_code_action(&self, params: CodeActionParams) -> Option<bool> {
+        self.lsp_files
+            .lock()
+            .ok()
+            .and_then(|lsp_files| lsp_files.code_action(params, &self.document_map))
+    }
+
+    pub async fn start_command(&self, params: ExecuteCommandParams) -> Option<Value> {
+        let mut diagnostics = HashMap::new();
+        let command = params.command;
+        if command == "reset_variables" {
+            self.config.read().ok().and_then(|config| -> Option<()> {
+                let diagnostics2 = walkdir(&config, &self.lsp_files, &self.document_map);
+                diagnostics2.ok().map(|all| {
+                    diagnostics = all;
+                });
+                None
+            });
+            if diagnostics.is_empty() {
+                return None;
+            }
+            self.publish_tag_diagnostics(diagnostics, None).await;
+            None
+        } else {
+            None
+        }
     }
 }

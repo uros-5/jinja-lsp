@@ -60,10 +60,6 @@ command = "jinja-lsp"
 config = { templates = "./templates", backend = ["./src"], lang = "rust"}
 timeout = 5
 
-
-
-
-
 [[language]]
 name = "jinja"
 language-servers = ["jinja-lsp"]

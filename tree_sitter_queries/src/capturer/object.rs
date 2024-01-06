@@ -77,16 +77,22 @@ impl JinjaObjectCapturer {
                     .is_none()
                 {
                     true => {
-                        self.objects
-                            .push(JinjaObject::new(String::from(value), start, end));
                         self.ident = (start, end);
+                        let is_filter = self.is_hover(start);
+                        self.objects.push(JinjaObject::new(
+                            String::from(value),
+                            start,
+                            end,
+                            is_filter,
+                        ));
                     }
                     false => (),
                 }
             } else {
-                self.objects
-                    .push(JinjaObject::new(String::from(value), start, end));
                 self.ident = (start, end);
+                let is_filter = self.is_hover(start);
+                self.objects
+                    .push(JinjaObject::new(String::from(value), start, end, is_filter));
             }
         }
     }
@@ -116,14 +122,16 @@ pub struct JinjaObject {
     pub location: (Point, Point),
     pub name: String,
     pub fields: Vec<(String, (Point, Point))>,
+    pub is_filter: bool,
 }
 
 impl JinjaObject {
-    pub fn new(name: String, start: Point, end: Point) -> Self {
+    pub fn new(name: String, start: Point, end: Point, is_filter: bool) -> Self {
         Self {
             name,
             location: (start, end),
             fields: vec![],
+            is_filter,
         }
     }
 

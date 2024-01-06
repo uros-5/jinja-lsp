@@ -23,6 +23,9 @@ pub fn search_errors(
     let props = query_props(root, source, trigger_point, query, true, capturer);
     let props = props.show();
     for object in props {
+        if object.is_filter {
+            continue;
+        }
         let file = variables.get(file_name)?;
         let mut exist = false;
         let mut err_type = JinjaDiagnostic::Undefined;

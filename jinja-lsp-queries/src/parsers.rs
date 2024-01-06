@@ -1,6 +1,6 @@
 use tree_sitter::{Parser, Tree};
 
-use crate::config::LangType;
+use crate::tree_builder::LangType;
 
 pub struct Parsers {
     jinja: Parser,
@@ -27,7 +27,6 @@ impl Default for Parsers {
         let _ = jinja.set_language(tree_sitter_jinja2::language());
         let mut backend = Parser::new();
         let _ = backend.set_language(tree_sitter_rust::language());
-
         Self { jinja, backend }
     }
 }

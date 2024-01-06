@@ -1,0 +1,33 @@
+[package]
+name = "jinja-lsp"
+version = "0.1.3"
+edition = "2021"
+license = "MIT"
+authors = ["uros-5"]
+description = "Language server for jinja2"
+homepage = "https://github.com/uros-5/jinja-lsp"
+repository = "https://github.com/uros-5/jinja-lsp"
+keywords = ["jinja", "templates", "language server", "lsp"]
+readme = "README.md"
+
+[[bin]]
+name = "jinja-lsp"
+path = "src/main.rs"
+
+[dependencies]
+env_logger = "0.9.0"
+ropey = "1.5.0"
+serde_json = "1.0.78"
+tokio = { version = "1.17.0", features = ["full"] }
+tower-lsp = { version = "0.19.0", features = ["proposed"]}
+serde = { version = "1.0", features = ["derive"] }
+dashmap = "5.1.0"
+log = "0.4.14"
+im-rc = "15.0.0"
+tree-sitter = "0.20.10"
+walkdir = "2.4.0"
+anyhow = "1.0.75"
+tree-sitter-jinja2 = "0.0.5"
+tree-sitter-rust = "0.20.4"
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.3"}
+

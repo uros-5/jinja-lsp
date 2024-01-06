@@ -1,8 +1,8 @@
-use std::{cell::RefCell, collections::HashMap};
 
-use tree_sitter::{Node, Point, Query, QueryCursor, TreeCursor};
 
-use crate::capturer::{CaptureDetails, Capturer};
+use tree_sitter::{Node, Point, Query, QueryCursor};
+
+use crate::capturer::{Capturer};
 
 #[derive(Debug)]
 pub struct Queries {

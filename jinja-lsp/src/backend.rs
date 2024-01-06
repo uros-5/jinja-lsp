@@ -20,12 +20,12 @@ use tower_lsp::lsp_types::{
     CompletionTriggerKind, Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams,
     DidSaveTextDocumentParams, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-    HoverProviderCapability, InitializedParams, Location, MarkupContent, MarkupKind, OneOf,
-    Position, Range, ServerCapabilities, ServerInfo, TextDocumentPositionParams,
+    HoverProviderCapability, InitializedParams, MarkupContent, MarkupKind, OneOf,
+    Position, Range, ServerCapabilities, ServerInfo,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
     TextDocumentSyncSaveOptions, Url,
 };
-use tree_sitter::Point;
+
 use tree_sitter_queries::{
     capturer::object::CompletionType,
     to_input_edit::ToInputEdit,

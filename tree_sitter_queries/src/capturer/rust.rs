@@ -3,12 +3,11 @@ use tree_sitter::Node;
 
 use tree_sitter::{Point, QueryCapture};
 
-use super::{CaptureDetails, Capturer};
+use super::Capturer;
 
 #[derive(Default, Debug, Clone)]
 pub struct RustVariables {
     variables: HashMap<String, (Point, Point)>,
-    id: usize,
 }
 
 impl RustVariables {

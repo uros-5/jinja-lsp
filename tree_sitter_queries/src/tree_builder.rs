@@ -164,11 +164,11 @@ impl JinjaKeyword {
                 let name = JinjaVariable::new(name, data.location, DataType::Block);
                 all.push(name);
             }
-            JinjaKeyword::Set { name, equals } => {
+            JinjaKeyword::Set { name, equals: _ } => {
                 let name = JinjaVariable::new(name, data.location, DataType::Variable);
                 all.push(name);
             }
-            JinjaKeyword::From { name, import } => {
+            JinjaKeyword::From { name: _, import: _ } => {
                 //
             }
             JinjaKeyword::With { name } => {
@@ -211,7 +211,7 @@ impl IdentifierState {
         }
     }
 
-    pub fn parse_end_statement(&mut self, capture: &QueryCapture<'_>, source: &str) {
+    pub fn parse_end_statement(&mut self, capture: &QueryCapture<'_>, _source: &str) {
         let mut c2 = capture.node.walk();
         let children = capture.node.children(&mut c2);
         for child in children {

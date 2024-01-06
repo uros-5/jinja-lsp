@@ -57,10 +57,3 @@ pub fn init_filter_completions() -> Vec<FilterCompletion> {
         FilterCompletion::from(("urlencode", include_str!("md/filters/urlencode.md"))),
     ]
 }
-
-pub fn find_filter<'a>(
-    name: &'a str,
-    filters: &'a [FilterCompletion],
-) -> Option<&'a FilterCompletion> {
-    filters.iter().find(|filter| filter.name == name)
-}

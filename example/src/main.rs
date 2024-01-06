@@ -2,7 +2,7 @@ use minijinja::{context, Environment};
 
 fn main() {
     let mut jinja = Environment::new();
-    let user = context! {
+    let _user = context! {
         first_name => "John",
         last_name => "Doe",
         email => "johndoe@example.com",

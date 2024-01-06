@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+
 
 use tree_sitter::{Point, QueryCapture};
 
-use super::{CaptureDetails, Capturer};
+use super::{Capturer};
 
 #[derive(Default, Debug)]
 pub struct JinjaObjectCapturer {

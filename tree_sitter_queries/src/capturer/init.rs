@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+
 
 use tree_sitter::QueryCapture;
 
 use crate::tree_builder::{IdentifierState, JinjaVariable};
 
-use super::{CaptureDetails, Capturer};
+use super::{Capturer};
 
 #[derive(Default)]
 pub struct JinjaInitCapturer {

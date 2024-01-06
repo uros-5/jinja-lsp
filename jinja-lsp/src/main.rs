@@ -2,7 +2,6 @@ mod backend;
 mod config;
 mod filter;
 mod lsp_files;
-mod types;
 
 use backend::Backend;
 use tower_lsp::LspService;

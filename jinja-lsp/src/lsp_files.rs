@@ -16,15 +16,13 @@ use tree_sitter_queries::{
     capturer::{
         init::JinjaInitCapturer,
         object::{CompletionType, JinjaObjectCapturer},
-        rust::{RustCapturer, RustVariables},
+        rust::RustCapturer,
     },
     lsp_helper::search_errors,
     parsers::Parsers,
     queries::{query_props, Queries},
     to_input_edit::to_position,
-    tree_builder::{
-        DataType, IdentifierState, JinjaDiagnostic, JinjaKeyword, JinjaVariable, LangType,
-    },
+    tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType},
 };
 
 use crate::config::JinjaConfig;
@@ -57,23 +55,21 @@ impl LspFiles {
         path: &&Path,
         lang_type: LangType,
         document_map: &DashMap<String, Rope>,
-        diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
+        _diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
     ) -> Option<()> {
         let res = None;
         let mut errors = None;
         if let Ok(name) = std::fs::canonicalize(path) {
             let name = name.to_str()?;
             let mut file_content = String::new();
-            read_to_string(&name)
-                .ok()
-                .and_then(|content| -> Option<()> {
-                    file_content = content;
-                    let rope = ropey::Rope::from_str(&file_content);
-                    let name = format!("file://{}", name);
-                    document_map.insert(name.to_string(), rope);
-                    self.add_tree(&name, lang_type, &file_content);
-                    None
-                });
+            read_to_string(name).ok().and_then(|content| -> Option<()> {
+                file_content = content;
+                let rope = ropey::Rope::from_str(&file_content);
+                let name = format!("file://{}", name);
+                document_map.insert(name.to_string(), rope);
+                self.add_tree(&name, lang_type, &file_content);
+                None
+            });
 
             let _ = self.queries.lock().ok().and_then(|query| -> Option<()> {
                 let name = format!("file://{}", name);
@@ -157,7 +153,7 @@ impl LspFiles {
         let tree = trees.get(name)?;
         let trigger_point = Point::new(0, 0);
         let closest_node = tree.root_node();
-        let mut diags = vec![];
+        let diags = vec![];
         match lang_type {
             LangType::Backend => {
                 let query = &query.rust_idents;
@@ -259,7 +255,7 @@ impl LspFiles {
             .and_then(|config| config.file_ext(&Path::new(&uri)))
             .map_or(false, |lang_type| lang_type == LangType::Template);
         if !can_complete {
-            return None;
+            None
         } else {
             let trees = self.trees.get(&LangType::Template)?;
             let tree = trees.get(&uri)?;
@@ -345,10 +341,9 @@ impl LspFiles {
         let trees = self.trees.get(&LangType::Template)?;
         let tree = trees.get(&uri)?;
         let closest_node = tree.root_node();
-        let mut res = None;
         let mut current_ident = String::new();
 
-        res = self
+        let mut res = self
             .queries
             .lock()
             .ok()
@@ -418,7 +413,7 @@ impl LspFiles {
         let trees = self.trees.get(&LangType::Template)?;
         let tree = trees.get(&uri)?;
         let closest_node = tree.root_node();
-        let mut current_ident = String::new();
+        let _current_ident = String::new();
         self.queries.lock().ok().and_then(|queries| {
             let query = &queries.jinja_idents;
             let capturer = JinjaObjectCapturer::default();
@@ -440,8 +435,8 @@ impl LspFiles {
     pub fn get_variables(
         &self,
         uri: &Url,
-        document_map: &DashMap<String, Rope>,
-        lang_type: LangType,
+        _document_map: &DashMap<String, Rope>,
+        _lang_type: LangType,
         position: Position,
     ) -> Option<Vec<CompletionItem>> {
         let start = position.line as usize;

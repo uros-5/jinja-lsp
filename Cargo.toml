@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "tree_sitter_queries",
-    "server",
+    "jinja-lsp",
     "example"
 ]
 

@@ -119,7 +119,7 @@ impl LanguageServer for Backend {
             },
             server_info: Some(ServerInfo {
                 name: String::from("jinja-lsp"),
-                version: Some(String::from("0.1.0")),
+                version: Some(String::from("0.1.3")),
             }),
             offset_encoding: None,
         })
@@ -127,7 +127,7 @@ impl LanguageServer for Backend {
 
     async fn initialized(&self, _params: InitializedParams) {
         self.client
-            .log_message(MessageType::INFO, "initialized!11111")
+            .log_message(MessageType::INFO, "Initialized")
             .await;
 
         match read_config(&self.config, &self.lsp_files, &self.document_map) {

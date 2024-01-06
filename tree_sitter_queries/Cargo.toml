@@ -1,7 +1,6 @@
 [package]
-
 name = "tree_sitter_queries"
-version = "0.5.0"
+version = "0.1.3"
 edition = "2021"
 
 [dependencies]

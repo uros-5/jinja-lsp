@@ -29,5 +29,5 @@ walkdir = "2.4.0"
 anyhow = "1.0.75"
 tree-sitter-jinja2 = "0.0.5"
 tree-sitter-rust = "0.20.4"
-tree_sitter_queries = { path = "../tree_sitter_queries", version = "0.1.3"}
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.3"}
 

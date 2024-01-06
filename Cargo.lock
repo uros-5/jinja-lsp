@@ -319,6 +319,7 @@ dependencies = [
  "dashmap",
  "env_logger",
  "im-rc",
+ "jinja-lsp-queries",
  "log",
  "ropey",
  "serde",
@@ -328,8 +329,19 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-jinja2",
  "tree-sitter-rust",
- "tree_sitter_queries",
  "walkdir",
+]
+
+[[package]]
+name = "jinja-lsp-queries"
+version = "0.1.3"
+dependencies = [
+ "dashmap",
+ "ropey",
+ "tower-lsp 0.20.0",
+ "tree-sitter",
+ "tree-sitter-jinja2",
+ "tree-sitter-rust",
 ]
 
 [[package]]
@@ -955,18 +967,6 @@ checksum = "b0832309b0b2b6d33760ce5c0e818cb47e1d72b468516bfe4134408926fa7594"
 dependencies = [
  "cc",
  "tree-sitter",
-]
-
-[[package]]
-name = "tree_sitter_queries"
-version = "0.1.3"
-dependencies = [
- "dashmap",
- "ropey",
- "tower-lsp 0.20.0",
- "tree-sitter",
- "tree-sitter-jinja2",
- "tree-sitter-rust",
 ]
 
 [[package]]

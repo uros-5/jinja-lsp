@@ -26,7 +26,7 @@ use tower_lsp::lsp_types::{
     TextDocumentSyncSaveOptions, Url,
 };
 
-use tree_sitter_queries::{
+use jinja_lsp_queries::{
     capturer::object::CompletionType,
     to_input_edit::ToInputEdit,
     tree_builder::{JinjaDiagnostic, JinjaVariable, LangType},

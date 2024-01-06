@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "tree_sitter_queries",
+    "jinja-lsp-queries",
     "jinja-lsp",
     "example"
 ]

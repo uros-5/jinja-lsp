@@ -1,5 +1,5 @@
 [package]
-name = "tree_sitter_queries"
+name = "jinja-lsp-queries"
 version = "0.1.3"
 edition = "2021"
 

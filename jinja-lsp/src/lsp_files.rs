@@ -6,13 +6,7 @@ use std::{
 };
 
 use dashmap::DashMap;
-use ropey::Rope;
-use tower_lsp::lsp_types::{
-    CodeActionParams, CompletionItem, CompletionItemKind, CompletionParams, GotoDefinitionParams,
-    GotoDefinitionResponse, HoverParams, Location, Position, Range, Url,
-};
-use tree_sitter::{InputEdit, Point, Tree};
-use tree_sitter_queries::{
+use jinja_lsp_queries::{
     capturer::{
         init::JinjaInitCapturer,
         object::{CompletionType, JinjaObjectCapturer},
@@ -24,6 +18,12 @@ use tree_sitter_queries::{
     to_input_edit::to_position,
     tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType},
 };
+use ropey::Rope;
+use tower_lsp::lsp_types::{
+    CodeActionParams, CompletionItem, CompletionItemKind, CompletionParams, GotoDefinitionParams,
+    GotoDefinitionResponse, HoverParams, Location, Position, Range, Url,
+};
+use tree_sitter::{InputEdit, Point, Tree};
 
 use crate::config::JinjaConfig;
 

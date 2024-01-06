@@ -6,10 +6,10 @@ use std::{
 
 use anyhow::Error;
 use dashmap::DashMap;
+use jinja_lsp_queries::tree_builder::{JinjaDiagnostic, JinjaVariable, LangType};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tree_sitter_queries::tree_builder::{JinjaDiagnostic, JinjaVariable, LangType};
 use walkdir::WalkDir;
 
 use crate::lsp_files::LspFiles;

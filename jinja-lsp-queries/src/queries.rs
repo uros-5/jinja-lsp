@@ -1,13 +1,12 @@
-
-
 use tree_sitter::{Node, Point, Query, QueryCursor};
 
-use crate::capturer::{Capturer};
+use crate::capturer::Capturer;
 
 #[derive(Debug)]
 pub struct Queries {
     pub jinja_init: Query,
     pub jinja_idents: Query,
+    pub jinja_imports: Query,
     pub rust_idents: Query,
 }
 
@@ -23,6 +22,7 @@ impl Default for Queries {
             jinja_init: Query::new(tree_sitter_jinja2::language(), INIT).unwrap(),
             jinja_idents: Query::new(tree_sitter_jinja2::language(), OBJECTS).unwrap(),
             rust_idents: Query::new(tree_sitter_rust::language(), RUST).unwrap(),
+            jinja_imports: Query::new(tree_sitter_jinja2::language(), IMPORTS).unwrap(),
         }
     }
 }
@@ -38,7 +38,6 @@ pub fn query_props<T: Capturer>(
     let mut cursor_qry = QueryCursor::new();
     let capture_names = query.capture_names();
     let matches = cursor_qry.matches(query, node, source.as_bytes());
-
     matches
         .into_iter()
         .flat_map(|m| {
@@ -123,4 +122,19 @@ pub static RUST: &str = r#"
     
     ) @function
 ])
+"#;
+
+pub static IMPORTS: &str = r#"
+(
+  [
+  	(statement
+     (statement_begin)
+     (keyword) @keyword
+     (string) @template
+     (statement_end)
+     
+     (#eq? @keyword "include")
+    ) @included
+  ]
+)
 "#;

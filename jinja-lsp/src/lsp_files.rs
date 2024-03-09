@@ -8,6 +8,7 @@ use std::{
 use dashmap::DashMap;
 use jinja_lsp_queries::{
     capturer::{
+        included::IncludeCapturer,
         init::JinjaInitCapturer,
         object::{CompletionType, JinjaObjectCapturer},
         rust::RustCapturer,
@@ -15,7 +16,7 @@ use jinja_lsp_queries::{
     lsp_helper::search_errors,
     parsers::Parsers,
     queries::{query_props, Queries},
-    to_input_edit::to_position,
+    to_input_edit::{to_position, to_position2},
     tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType},
 };
 use ropey::Rope;
@@ -33,6 +34,7 @@ pub struct LspFiles {
     pub parsers: Arc<Mutex<Parsers>>,
     pub variables: DashMap<String, Vec<JinjaVariable>>,
     pub queries: Arc<Mutex<Queries>>,
+    pub root_path: Url,
 }
 
 impl Default for LspFiles {
@@ -45,6 +47,7 @@ impl Default for LspFiles {
             parsers: Arc::new(Mutex::new(Parsers::default())),
             variables: DashMap::new(),
             queries: Arc::new(Mutex::new(Queries::default())),
+            root_path: Url::parse("file://").unwrap(),
         }
     }
 }
@@ -324,6 +327,7 @@ impl LspFiles {
         &self,
         params: GotoDefinitionParams,
         document_map: &DashMap<String, Rope>,
+        config: &RwLock<JinjaConfig>,
     ) -> Option<GotoDefinitionResponse> {
         let uri = params
             .text_document_position_params
@@ -381,21 +385,52 @@ impl LspFiles {
 
         res.is_none().then(|| -> Option<()> {
             if current_ident.is_empty() {
-                return None;
-            }
-            let mut all: Vec<Location> = vec![];
-            for i in &self.variables {
-                let idents = i.value().iter().filter(|item| item.name == current_ident);
-                for id in idents {
-                    let uri = Url::parse(i.key()).unwrap();
-                    let (start, end) = to_position(id);
-                    let range = Range::new(start, end);
-                    let location = Location { uri, range };
-                    all.push(location);
+                self.queries.lock().ok().and_then(|queries| {
+                    let query = &queries.jinja_imports;
+                    let capturer = IncludeCapturer::default();
+                    let doc = document_map.get(&uri)?;
+                    let mut writter = FileWriter::default();
+                    let _ = doc.write_to(&mut writter);
+                    let props = query_props(
+                        closest_node,
+                        &writter.content,
+                        point,
+                        query,
+                        false,
+                        capturer,
+                    );
+                    if props.in_template(point) {
+                        if let Ok(config) = config.read() {
+                            let template = format!("{}/{}", config.templates, &props.template);
+                            let template = std::fs::canonicalize(template).ok()?;
+                            let url = format!("file://{}", template.to_str()?);
+                            let uri = Url::parse(&url).ok()?;
+                            let start = to_position2(Point::new(0, 0));
+                            let end = to_position2(Point::new(0, 0));
+                            let range = Range::new(start, end);
+                            let location = Location { uri, range };
+                            res = Some(GotoDefinitionResponse::Scalar(location));
+                            return Some(template);
+                        }
+                    }
+                    None
+                });
+                None
+            } else {
+                let mut all: Vec<Location> = vec![];
+                for i in &self.variables {
+                    let idents = i.value().iter().filter(|item| item.name == current_ident);
+                    for id in idents {
+                        let uri = Url::parse(i.key()).unwrap();
+                        let (start, end) = to_position(id);
+                        let range = Range::new(start, end);
+                        let location = Location { uri, range };
+                        all.push(location);
+                    }
                 }
+                res = Some(GotoDefinitionResponse::Array(all));
+                None
             }
-            res = Some(GotoDefinitionResponse::Array(all));
-            None
         });
 
         res

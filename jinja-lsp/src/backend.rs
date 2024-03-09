@@ -20,10 +20,9 @@ use tower_lsp::lsp_types::{
     CompletionTriggerKind, Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams,
     DidSaveTextDocumentParams, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-    HoverProviderCapability, InitializedParams, MarkupContent, MarkupKind, OneOf,
-    Position, Range, ServerCapabilities, ServerInfo,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TextDocumentSyncSaveOptions, Url,
+    HoverProviderCapability, InitializedParams, MarkupContent, MarkupKind, OneOf, Position, Range,
+    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Url,
 };
 
 use jinja_lsp_queries::{
@@ -50,6 +49,17 @@ pub struct Backend {
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        let mut root = Url::parse("file://").unwrap();
+        if let Some(folders) = params.workspace_folders {
+            if let Some(dirs) = folders.first() {
+                root = dirs.uri.to_owned();
+            }
+        } else if let Some(dir) = params.root_uri {
+            root = dir.to_owned();
+        }
+        if let Ok(mut lsp_files) = self.lsp_files.lock() {
+            lsp_files.root_path = root;
+        }
         let mut definition_provider = None;
         let mut references_provider = None;
         let mut code_action_provider = None;
@@ -394,6 +404,12 @@ impl Backend {
 
         for (file, diags) in diagnostics {
             for (variable, diag2) in diags {
+                let severity = {
+                    match diag2 {
+                        JinjaDiagnostic::DefinedSomewhere => DiagnosticSeverity::INFORMATION,
+                        JinjaDiagnostic::Undefined => DiagnosticSeverity::WARNING,
+                    }
+                };
                 added = true;
 
                 let diagnostic = Diagnostic {
@@ -407,7 +423,7 @@ impl Backend {
                             variable.location.1.column as u32,
                         ),
                     ),
-                    severity: Some(DiagnosticSeverity::WARNING),
+                    severity: Some(severity),
                     message: diag2.to_string(),
                     source: Some(String::from("jinja-lsp")),
                     ..Default::default()
@@ -451,17 +467,15 @@ impl Backend {
             .lock()
             .ok()
             .and_then(|lsp_files| lsp_files.hover(params, &self.document_map))
-            .map(|hover| hover)
     }
 
     pub fn start_goto_definition(
         &self,
         params: GotoDefinitionParams,
     ) -> Option<GotoDefinitionResponse> {
-        self.lsp_files
-            .lock()
-            .ok()
-            .and_then(|lsp_files| lsp_files.goto_definition(params, &self.document_map))
+        self.lsp_files.lock().ok().and_then(|lsp_files| {
+            lsp_files.goto_definition(params, &self.document_map, &self.config)
+        })
     }
 
     pub fn start_code_action(&self, params: CodeActionParams) -> Option<bool> {
@@ -477,9 +491,9 @@ impl Backend {
         if command == "reset_variables" {
             self.config.read().ok().and_then(|config| -> Option<()> {
                 let diagnostics2 = walkdir(&config, &self.lsp_files, &self.document_map);
-                diagnostics2.ok().map(|all| {
+                if let Ok(all) = diagnostics2 {
                     diagnostics = all;
-                });
+                }
                 None
             });
             if diagnostics.is_empty() {

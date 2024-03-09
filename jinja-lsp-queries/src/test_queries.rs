@@ -5,6 +5,7 @@ mod query_tests {
 
     use crate::{
         capturer::{
+            included::IncludeCapturer,
             init::JinjaInitCapturer,
             object::{CompletionType, JinjaObjectCapturer},
             rust::RustCapturer,
@@ -98,7 +99,7 @@ mod query_tests {
         let closest_node = tree.root_node();
         let query = Queries::default();
         let query = &query.jinja_idents;
-        let mut capturer = JinjaObjectCapturer::default();
+        let capturer = JinjaObjectCapturer::default();
         let props = query_props(closest_node, case, trigger_point, query, true, capturer);
         assert_eq!(props.show().len(), 7);
     }
@@ -133,6 +134,7 @@ mod query_tests {
             let price = 100;
             let c = context!{ price };
             jinja.add_filter("running_locally", true);        
+            jinja.add_function("some_fn", some_fn);
         "#;
 
         let tree = prepare_rust_tree(case);
@@ -150,7 +152,7 @@ mod query_tests {
         }
         let variables = props.variables();
         count += variables.len();
-        assert_eq!(count, 6);
+        assert_eq!(count, 7);
     }
 
     #[test]
@@ -187,6 +189,41 @@ mod query_tests {
             let capturer = JinjaObjectCapturer::default();
             let props = query_props(closest_node, source, trigger_point, query, false, capturer);
             assert_eq!(props.completion(trigger_point), case.1);
+        }
+    }
+
+    #[test]
+    fn find_includes() {
+        let source = r#"
+            <div class="bg-white overflow-hidden shadow rounded-lg border">
+                {% include 'header.jinja' %}
+            {% include 'customization.jinja' ignore missing %}
+                {% include ['page_detailed.jinja', 'page.jinja'] %}
+            </div>   
+        "#;
+        let cases = [
+            (Point::new(2, 31), "header.jinja"),
+            (Point::new(3, 23), "customization.jinja"),
+            (Point::new(4, 62), "page.jinja"),
+        ];
+        for case in cases {
+            let tree = prepare_jinja_tree(source);
+            let trigger_point = case;
+            let closest_node = tree.root_node();
+            let query = Queries::default();
+
+            let query = &query.jinja_imports;
+            let capturer = IncludeCapturer::default();
+            let props = query_props(
+                closest_node,
+                source,
+                trigger_point.0,
+                query,
+                false,
+                capturer,
+            );
+            assert!(props.in_template(case.0));
+            assert_eq!(&props.template, case.1);
         }
     }
 }

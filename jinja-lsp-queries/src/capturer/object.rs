@@ -1,8 +1,6 @@
-
-
 use tree_sitter::{Point, QueryCapture};
 
-use super::{Capturer};
+use super::Capturer;
 
 #[derive(Default, Debug)]
 pub struct JinjaObjectCapturer {

@@ -211,15 +211,15 @@ impl IdentifierState {
         }
     }
 
-    pub fn parse_end_statement(&mut self, capture: &QueryCapture<'_>, _source: &str) {
-        let mut c2 = capture.node.walk();
-        let children = capture.node.children(&mut c2);
-        for child in children {
-            match child.kind_id() {
-                26 => (),
-                _ => (),
-            }
-        }
+    pub fn parse_end_statement(&mut self, _capture: &QueryCapture<'_>, _source: &str) {
+        // let mut c2 = capture.node.walk();
+        // let children = capture.node.children(&mut c2);
+        // for child in children {
+        //     match child.kind_id() {
+        //         26 => (),
+        //         _ => (),
+        //     }
+        // }
     }
 
     pub fn add_keyword(&mut self, child: Node<'_>, source: &str) {
@@ -232,7 +232,9 @@ impl IdentifierState {
                 return;
             }
             let kw = JinjaKeyword::try_from(kw);
-            kw.ok().map(|kw| self.keyword = kw);
+            if let Ok(kw) = kw {
+                self.keyword = kw
+            }
             self.have_keyword = true;
         }
     }

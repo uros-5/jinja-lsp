@@ -55,3 +55,7 @@ pub fn to_position(variable: &JinjaVariable) -> (Position, Position) {
         ),
     )
 }
+
+pub fn to_position2(point: Point) -> Position {
+    Position::new(point.row as u32, point.column as u32)
+}

@@ -24,11 +24,11 @@ use tree_sitter::Tree;
 
 use crate::{config::JinjaConfig, lsp_files::LspFiles};
 
-pub async fn lsp_listen(
-    lint_channel: mpsc::Sender<String>,
+pub fn lsp_task(
+    client: Client,
+    diagnostics_channel: mpsc::Sender<String>,
     lsp_channel: mpsc::Sender<LspMessage>,
     mut lsp_recv: mpsc::Receiver<LspMessage>,
-    client: Client,
 ) {
     // let mut documents = HashMap::new();
     let mut can_complete = false;

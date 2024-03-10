@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "dashmap",
  "ropey",

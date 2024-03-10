@@ -7,6 +7,7 @@ use std::{
 use dashmap::{mapref::one::RefMut, DashMap};
 use ropey::Rope;
 use serde_json::Value;
+use tokio::sync::mpsc;
 use tower_lsp::{
     jsonrpc::Result,
     lsp_types::{InitializeParams, InitializeResult, MessageType},
@@ -32,6 +33,7 @@ use jinja_lsp_queries::{
 };
 
 use crate::{
+    channels::{diagnostics::diagnostics_task, lsp::lsp_task},
     config::{config_exist, read_config, walkdir, JinjaConfig},
     filter::{init_filter_completions, FilterCompletion},
     lsp_files::{FileWriter, LspFiles},
@@ -332,6 +334,10 @@ pub fn code_actions() -> Vec<CodeActionOrCommand> {
 }
 impl Backend {
     pub fn new(client: Client) -> Self {
+        let (lsp_sender, lsp_recv) = mpsc::channel(20);
+        let (diagnostic_sender, diagnostic_recv) = mpsc::channel(20);
+        lsp_task(client.clone(), diagnostic_sender, lsp_sender, lsp_recv);
+        diagnostics_task(client.clone(), diagnostic_recv);
         let document_map = DashMap::new();
         let can_complete = RwLock::new(false);
         let config = RwLock::new(JinjaConfig::default());

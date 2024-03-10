@@ -5,7 +5,7 @@ mod query_tests {
 
     use crate::{
         capturer::{
-            included::IncludeCapturer,
+            included::{IncludeCapturer, IncludedTemplate},
             init::JinjaInitCapturer,
             object::{CompletionType, JinjaObjectCapturer},
             rust::RustCapturer,
@@ -222,8 +222,9 @@ mod query_tests {
                 false,
                 capturer,
             );
-            assert!(props.in_template(case.0));
-            assert_eq!(&props.template, case.1);
+            let template = props.in_template(case.0);
+            assert!(template.is_some());
+            assert_eq!(&template.unwrap().name, &case.1);
         }
     }
 }

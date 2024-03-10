@@ -96,6 +96,7 @@ impl LanguageServer for Backend {
                 self.client
                     .log_message(MessageType::INFO, "Config not found")
                     .await;
+                self.shutdown().await;
             }
         }
 

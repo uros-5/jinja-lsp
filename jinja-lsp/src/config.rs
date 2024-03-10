@@ -19,8 +19,8 @@ use crate::lsp_files::LspFiles;
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct JinjaConfig {
     pub templates: String,
-    backend: Vec<String>,
-    lang: String,
+    pub backend: Vec<String>,
+    pub lang: String,
     #[serde(skip)]
     pub user_defined: bool,
 }

@@ -399,18 +399,15 @@ impl LspFiles {
                         false,
                         capturer,
                     );
-                    if props.in_template(point) {
+                    if let Some(last) = props.in_template(point) {
                         if let Ok(config) = config.read() {
-                            let template = format!("{}/{}", config.templates, &props.template);
-                            let template = std::fs::canonicalize(template).ok()?;
-                            let url = format!("file://{}", template.to_str()?);
-                            let uri = Url::parse(&url).ok()?;
+                            let uri = last.is_template(&config.templates)?;
                             let start = to_position2(Point::new(0, 0));
                             let end = to_position2(Point::new(0, 0));
                             let range = Range::new(start, end);
                             let location = Location { uri, range };
                             res = Some(GotoDefinitionResponse::Scalar(location));
-                            return Some(template);
+                            return Some(());
                         }
                     }
                     None

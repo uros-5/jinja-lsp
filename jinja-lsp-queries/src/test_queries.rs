@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod query_tests {
 
+    use crate::capturer::included::IncludeCapturer;
     use tree_sitter::{Parser, Point};
 
     use crate::{
         capturer::{
-            included::{IncludeCapturer, IncludedTemplate},
             init::JinjaInitCapturer,
             object::{CompletionType, JinjaObjectCapturer},
             rust::RustCapturer,

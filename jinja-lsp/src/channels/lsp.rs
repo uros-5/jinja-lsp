@@ -1,32 +1,32 @@
-use std::collections::HashMap;
-
-use jinja_lsp_queries::{
-    parsers::Parsers,
-    queries::Queries,
-    tree_builder::{JinjaVariable, LangType},
-};
-use ropey::Rope;
+use jinja_lsp_queries::capturer::object::CompletionType;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tower_lsp::{
     lsp_types::{
-        CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CompletionOptions,
-        CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
-        DidOpenTextDocumentParams, DidSaveTextDocumentParams, ExecuteCommandOptions,
-        ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
-        HoverProviderCapability, InitializeParams, InitializeResult, MessageType, OneOf,
+        CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CompletionItem,
+        CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
+        DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+        Documentation, ExecuteCommandOptions, ExecuteCommandParams, GotoDefinitionParams,
+        GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability,
+        InitializeParams, InitializeResult, MarkupContent, MarkupKind, MessageType, OneOf,
         ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
         TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
     },
     Client,
 };
-use tree_sitter::Tree;
 
-use crate::{config::JinjaConfig, lsp_files::LspFiles};
+use crate::{
+    backend::code_actions,
+    config::{walkdir, JinjaConfig},
+    filter::init_filter_completions,
+    lsp_files::LspFiles,
+};
+
+use super::diagnostics::DiagnosticMessage;
 
 pub fn lsp_task(
     client: Client,
-    diagnostics_channel: mpsc::Sender<String>,
+    diagnostics_channel: mpsc::Sender<DiagnosticMessage>,
     lsp_channel: mpsc::Sender<LspMessage>,
     mut lsp_recv: mpsc::Receiver<LspMessage>,
 ) {
@@ -34,6 +34,7 @@ pub fn lsp_task(
     let mut can_complete = false;
     let mut config = JinjaConfig::default();
     let mut lsp_data = LspFiles::default();
+    let filters = init_filter_completions();
     tokio::spawn(async move {
         while let Some(msg) = lsp_recv.recv().await {
             match msg {
@@ -59,7 +60,7 @@ pub fn lsp_task(
                     }
 
                     let definition_provider = Some(OneOf::Left(true));
-                    let references_provider = Some(OneOf::Left(true));
+                    let references_provider = None;
                     let code_action_provider = Some(CodeActionProviderCapability::Simple(true));
                     let hover_provider = Some(HoverProviderCapability::Simple(true));
                     let execute_command_provider = Some(ExecuteCommandOptions {
@@ -97,40 +98,139 @@ pub fn lsp_task(
                         },
                         server_info: Some(ServerInfo {
                             name: String::from("jinja-lsp"),
-                            version: Some(String::from("0.1.5")),
+                            version: Some(String::from("0.1.6")),
                         }),
                         offset_encoding: None,
                     };
                     let _ = sender.send(msg);
                 }
-                LspMessage::Initialized => {
+                LspMessage::Initialized(sender) => {
                     client.log_message(MessageType::INFO, "Initialized").await;
                     if !config.user_defined {
                         client
                             .log_message(MessageType::INFO, "Config doesn't exist.")
                             .await;
+                        break;
                     }
                     if config.templates.is_empty() {
                         client
                             .log_message(MessageType::INFO, "Template directory not found")
                             .await;
+                        break;
                     }
-                    if config.lang == "rust" {
+                    if config.lang != "rust" {
                         client
                             .log_message(MessageType::INFO, "Backend language not supported")
                             .await;
+                        break;
                     } else {
-                        // walkdir(&config, lsp_files, document_map)
+                        match walkdir(&config) {
+                            Ok(errors) => {
+                                let _ = diagnostics_channel
+                                    .send(DiagnosticMessage::Errors {
+                                        diagnostics: errors.0,
+                                        current_file: None,
+                                    })
+                                    .await;
+                                lsp_data = errors.1;
+                                let _ = sender.send(true);
+                            }
+                            Err(err) => {
+                                let msg = err.to_string();
+                                client.log_message(MessageType::INFO, msg).await;
+                                let _ = sender.send(false);
+                                break;
+                            }
+                        }
                     }
                 }
-                LspMessage::DidChange(_) => todo!(),
-                LspMessage::DidSave(_) => todo!(),
-                LspMessage::Completion(_, _) => todo!(),
-                LspMessage::Hover(_, _) => todo!(),
-                LspMessage::GoToDefinition(_, _) => todo!(),
-                LspMessage::CodeAction(_, _) => todo!(),
-                LspMessage::ExecuteCommand(_, _) => todo!(),
-                LspMessage::DidOpen(_) => todo!(),
+                LspMessage::DidChange(params) => {
+                    lsp_data.did_change(params, &config);
+                }
+                LspMessage::DidSave(params) => {
+                    if let Some(errors) = lsp_data.did_save(params, &config) {
+                        let _ = diagnostics_channel.send(errors).await;
+                    }
+                }
+                LspMessage::Completion(params, sender) => {
+                    let position = params.text_document_position.position;
+                    let uri = params.text_document_position.text_document.uri.clone();
+                    let completion = lsp_data.completion(params, &config, can_complete);
+                    let mut items = None;
+
+                    if let Some(completion) = completion {
+                        match completion {
+                            CompletionType::Filter => {
+                                let completions = filters.clone();
+                                let mut ret = Vec::with_capacity(completions.len());
+                                for item in completions.into_iter() {
+                                    ret.push(CompletionItem {
+                                        label: item.name,
+                                        kind: Some(CompletionItemKind::TEXT),
+                                        documentation: Some(Documentation::MarkupContent(
+                                            MarkupContent {
+                                                kind: MarkupKind::Markdown,
+                                                value: item.desc.to_string(),
+                                            },
+                                        )),
+                                        ..Default::default()
+                                    });
+                                }
+                                items = Some(CompletionResponse::Array(ret));
+                            }
+                            CompletionType::Identifier => {
+                                if let Some(variables) = lsp_data.read_variables(&uri, position) {
+                                    items = Some(CompletionResponse::Array(variables));
+                                }
+                            }
+                        };
+                    }
+                    let _ = sender.send(items);
+                }
+                LspMessage::Hover(params, sender) => {
+                    let mut res = None;
+                    if let Some(hover) = lsp_data.hover(params, &config) {
+                        let filter = filters.iter().find(|name| name.name == hover);
+                        if let Some(filter) = filter {
+                            let markup_content = MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: filter.desc.to_string(),
+                            };
+                            let hover_contents = HoverContents::Markup(markup_content);
+                            let hover = Hover {
+                                contents: hover_contents,
+                                range: None,
+                            };
+                            res = Some(hover);
+                        }
+                    }
+                    let _ = sender.send(res);
+                }
+                LspMessage::GoToDefinition(params, sender) => {
+                    if let Some(definition) = lsp_data.goto_definition(params, &config) {
+                        let _ = sender.send(Some(definition));
+                    }
+                }
+                LspMessage::CodeAction(params, sender) => {
+                    if let Some(is_code_action) = lsp_data.code_action(params, &config) {
+                        if is_code_action {
+                            let _ = sender.send(Some(code_actions()));
+                        }
+                    }
+                }
+                LspMessage::ExecuteCommand(params, sender) => {
+                    let command = params.command;
+                    if command == "reset_variables" {
+                        let (sender2, _) = oneshot::channel();
+                        let _ = lsp_channel.send(LspMessage::Initialized(sender2)).await;
+                        let _ = sender.send(None);
+                    }
+                }
+                LspMessage::DidOpen(params) => {
+                    if let Some(errors) = lsp_data.did_open(params, &config) {
+                        let _ = diagnostics_channel.send(errors).await;
+                    }
+                }
             }
         }
     });
@@ -138,7 +238,7 @@ pub fn lsp_task(
 
 pub enum LspMessage {
     Initialize(Box<InitializeParams>, oneshot::Sender<InitializeResult>),
-    Initialized,
+    Initialized(oneshot::Sender<bool>),
     DidOpen(DidOpenTextDocumentParams),
     DidChange(DidChangeTextDocumentParams),
     DidSave(DidSaveTextDocumentParams),

@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp-queries"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "TreeSitter queries for jinja-lsp"
 license = "MIT"
@@ -9,7 +9,6 @@ license = "MIT"
 tree-sitter = "0.20.10"
 tree-sitter-jinja2 = "0.0.5"
 tree-sitter-rust = "0.20.4"
-dashmap = "5.1.0"
 tower-lsp = { version = "0.20.0", features = ["proposed"] }
 ropey = "1.5.0"
 

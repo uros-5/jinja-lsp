@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use dashmap::DashMap;
 use tree_sitter::{Node, Point};
 
 use crate::{
@@ -13,42 +12,38 @@ pub fn search_errors(
     root: Node<'_>,
     source: &str,
     query: &Queries,
-    variables: &DashMap<String, Vec<JinjaVariable>>,
+    variables: &HashMap<String, Vec<JinjaVariable>>,
     file_name: &String,
-    diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
-) -> Option<()> {
+) -> Option<Vec<(JinjaVariable, JinjaDiagnostic)>> {
     let trigger_point = Point::new(0, 0);
     let query = &query.jinja_idents;
     let capturer = JinjaObjectCapturer::default();
     let props = query_props(root, source, trigger_point, query, true, capturer);
     let props = props.show();
+    let mut diags = vec![];
     for object in props {
         if object.is_filter {
             continue;
         }
-        let file = variables.get(file_name)?;
+        let jinja_variables = variables.get(file_name)?;
         let mut exist = false;
         let mut err_type = JinjaDiagnostic::Undefined;
         let mut to_warn = false;
-        let temp = file
-            .value()
+        // variable definition is in this file
+        let located = jinja_variables
             .iter()
             .filter(|variable| variable.name == object.name)
             .filter(|variable| {
                 exist = true;
                 object.location.0 >= variable.location.0
             });
-        let empty = temp.count() == 0;
+        let empty = located.count() == 0;
         if empty && exist {
             to_warn = true;
         } else if empty {
             to_warn = true;
-            drop(file);
             for i in variables {
-                let temp = i
-                    .value()
-                    .iter()
-                    .filter(|variable| variable.name == object.name);
+                let temp = i.1.iter().filter(|variable| variable.name == object.name);
 
                 if temp.count() != 0 {
                     err_type = JinjaDiagnostic::DefinedSomewhere;
@@ -59,12 +54,12 @@ pub fn search_errors(
         }
         if to_warn {
             let variable = JinjaVariable::new(&object.name, object.location, DataType::Variable);
-            if diags.get(file_name).is_none() {
-                diags.insert(file_name.to_string(), vec![(variable, err_type)]);
-            } else {
-                diags.get_mut(file_name).unwrap().push((variable, err_type));
-            }
+            diags.push((variable, err_type));
         }
     }
-    None
+    if diags.is_empty() {
+        None
+    } else {
+        Some(diags)
+    }
 }

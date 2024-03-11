@@ -65,28 +65,24 @@ impl JinjaObjectCapturer {
         let end = capture.node.end_position();
         if let Ok(value) = value {
             if start.row == self.dot.1.row && start.column == self.dot.1.column {
-                match self
-                    .objects
-                    .last_mut()
-                    .map(|last| {
-                        last.fields.push((String::from(value), (start, end)));
-                        self.ident = (start, end);
-                    })
-                    .is_none()
-                {
-                    true => {
-                        self.ident = (start, end);
-                        let is_filter = self.is_hover(start);
-                        self.objects.push(JinjaObject::new(
-                            String::from(value),
-                            start,
-                            end,
-                            is_filter,
-                        ));
+                if let Some(last) = self.objects.last_mut() {
+                    last.fields.push((String::from(value), (start, end)));
+                    self.ident = (start, end);
+                } else {
+                    // TODO: in future add those to main library
+                    if VALID_IDENTIFIERS.contains(&value) {
+                        return;
                     }
-                    false => (),
+                    self.ident = (start, end);
+                    let is_filter = self.is_hover(start);
+                    self.objects
+                        .push(JinjaObject::new(String::from(value), start, end, is_filter));
                 }
             } else {
+                // TODO: in future add those to main library
+                if VALID_IDENTIFIERS.contains(&value) {
+                    return;
+                }
                 self.ident = (start, end);
                 let is_filter = self.is_hover(start);
                 self.objects
@@ -143,3 +139,5 @@ pub enum CompletionType {
     Filter,
     Identifier,
 }
+
+static VALID_IDENTIFIERS: [&str; 4] = ["loop", "true", "false", "not"];

@@ -227,4 +227,15 @@ mod query_tests {
             assert_eq!(&template.unwrap().name, &case.1);
         }
     }
+
+    // #[test]
+    // fn included_template_completion() {
+    //     let source = r#"
+    //         <div>
+    //             {% include "
+    //         </div>
+    //     "#;
+
+    //     let cases = [(Point::new(2, 28), false, true, false)];
+    // }
 }

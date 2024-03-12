@@ -290,7 +290,7 @@ checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
 
 [[package]]
 name = "jinja-lsp"
-version = "0.1.6"
+version = "0.1.61"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.6"
+version = "0.1.61"
 dependencies = [
  "ropey",
  "tower-lsp",

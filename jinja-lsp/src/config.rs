@@ -41,7 +41,6 @@ pub type InitLsp = (
 );
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
-    //
     let mut all = vec![config.templates.clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);

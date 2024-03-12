@@ -183,6 +183,13 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(variables));
                                 }
                             }
+                            CompletionType::IncludedTemplate { name, range } => {
+                                if let Some(templates) =
+                                    lsp_data.read_templates(name, &config, range)
+                                {
+                                    items = Some(CompletionResponse::Array(templates));
+                                }
+                            }
                         };
                     }
                     let _ = sender.send(items);

@@ -1,6 +1,8 @@
 use jinja_lsp_queries::tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType};
 use std::{collections::HashMap, fs::read_to_string, path::Path};
-use tower_lsp::lsp_types::{CompletionItemKind, DidOpenTextDocumentParams};
+use tower_lsp::lsp_types::{
+    CompletionItemKind, CompletionTextEdit, DidOpenTextDocumentParams, TextEdit,
+};
 
 use jinja_lsp_queries::{
     capturer::{
@@ -273,7 +275,19 @@ impl LspFiles {
             false,
             capturer,
         );
-        // TODO check for include capturer
+        if let Some(completion) = props.completion(point) {
+            return Some(completion);
+        }
+        let query = &self.queries.jinja_imports;
+        let capturer = IncludeCapturer::default();
+        let props = query_props(
+            closest_node,
+            &writter.content,
+            point,
+            query,
+            false,
+            capturer,
+        );
         props.completion(point)
     }
 
@@ -488,6 +502,40 @@ impl LspFiles {
             return Some(items);
         }
         None
+    }
+
+    pub fn read_templates(
+        &self,
+        mut prefix: String,
+        config: &JinjaConfig,
+        range: Range,
+    ) -> Option<Vec<CompletionItem>> {
+        let all_templates = self.trees.get(&LangType::Template)?;
+        if prefix.is_empty() {
+            prefix = String::from("file:///");
+        }
+        let templates = all_templates
+            .keys()
+            .filter(|template| template.contains(&prefix));
+        let mut abc = vec![];
+        for template in templates {
+            let c = &config.templates.replace('.', "");
+            let mut parts = template.split(c);
+            parts.next();
+            let label = parts.next()?.replacen('/', "", 1);
+            let new_text = format!("\"{label}\"");
+            let text_edit = CompletionTextEdit::Edit(TextEdit::new(range, new_text));
+            let item = CompletionItem {
+                label,
+                detail: Some("Jinja template".to_string()),
+                kind: Some(CompletionItemKind::FILE),
+                text_edit: Some(text_edit),
+                ..Default::default()
+            };
+            abc.push(item);
+        }
+
+        Some(abc)
     }
 
     pub fn did_open(

@@ -125,16 +125,22 @@ pub static RUST: &str = r#"
 "#;
 
 pub static IMPORTS: &str = r#"
-(
-  [
-  	(statement
-     (statement_begin)
-     (keyword) @keyword
-     (string) @template
-     (statement_end)
-     
-     (#eq? @keyword "include")
-    ) @included
-  ]
-)
+[
+  (statement
+    (statement_begin)
+    (keyword) @keyword  
+    (string)? @template
+    (ERROR)? @error     
+    (identifier)? @id
+    (statement_end)? @end 
+    (#eq? @keyword "include")
+  )
+  	(statement_begin)
+    (keyword) @keyword  
+    (string)? @template
+    (ERROR)? @error     
+    (identifier)? @id
+    (statement_end)? @end 
+    (#eq? @keyword "include")
+]
 "#;

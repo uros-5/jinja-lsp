@@ -1,3 +1,4 @@
+use tower_lsp::lsp_types::Range;
 use tree_sitter::{Point, QueryCapture};
 
 use super::Capturer;
@@ -134,10 +135,11 @@ impl JinjaObject {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(PartialEq, Debug)]
 pub enum CompletionType {
     Filter,
     Identifier,
+    IncludedTemplate { name: String, range: Range },
 }
 
 static VALID_IDENTIFIERS: [&str; 4] = ["loop", "true", "false", "not"];

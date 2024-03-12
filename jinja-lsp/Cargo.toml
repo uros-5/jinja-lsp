@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp"
-version = "0.1.6"
+version = "0.1.61"
 edition = "2021"
 license = "MIT"
 authors = ["uros-5"]
@@ -30,4 +30,4 @@ walkdir = "2.4.0"
 anyhow = "1.0.75"
 tree-sitter-jinja2 = "0.0.5"
 tree-sitter-rust = "0.20.4"
-jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.6"}
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.61"}

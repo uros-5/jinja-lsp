@@ -25,6 +25,9 @@ pub fn diagnostics_task(client: Client, mut receiver: Receiver<DiagnosticMessage
                                         DiagnosticSeverity::INFORMATION
                                     }
                                     JinjaDiagnostic::Undefined => DiagnosticSeverity::WARNING,
+                                    JinjaDiagnostic::TemplateNotFound => {
+                                        DiagnosticSeverity::WARNING
+                                    }
                                 }
                             };
                             added = true;

@@ -8,7 +8,7 @@ use crate::lsp_files::LspFiles;
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct JinjaConfig {
     pub templates: String,
     pub backend: Vec<String>,

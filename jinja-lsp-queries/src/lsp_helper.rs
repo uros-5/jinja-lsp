@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::ErrorKind};
 
 use tree_sitter::{Node, Point};
 
@@ -14,6 +14,7 @@ pub fn search_errors(
     query: &Queries,
     variables: &HashMap<String, Vec<JinjaVariable>>,
     file_name: &String,
+    templates: &String,
 ) -> Option<Vec<(JinjaVariable, JinjaDiagnostic)>> {
     let trigger_point = Point::new(0, 0);
     let query = &query.jinja_idents;
@@ -57,6 +58,23 @@ pub fn search_errors(
             diags.push((variable, err_type));
         }
     }
+    let jinja_variables = variables.get(file_name)?;
+    let abc = jinja_variables
+        .iter()
+        .filter(|variable| variable.data_type == DataType::Template);
+    for i in abc {
+        if i.name.is_empty() {
+            diags.push((i.clone(), JinjaDiagnostic::TemplateNotFound));
+        } else {
+            let path = format!("{templates}/{}", i.name);
+            if let Err(err) = std::fs::canonicalize(path) {
+                if err.kind() == ErrorKind::NotFound {
+                    diags.push((i.clone(), JinjaDiagnostic::TemplateNotFound));
+                }
+            }
+        }
+    }
+
     if diags.is_empty() {
         None
     } else {

@@ -98,7 +98,7 @@ pub fn lsp_task(
                         },
                         server_info: Some(ServerInfo {
                             name: String::from("jinja-lsp"),
-                            version: Some(String::from("0.1.6")),
+                            version: Some(String::from("0.1.61")),
                         }),
                         offset_encoding: None,
                     };
@@ -133,6 +133,8 @@ pub fn lsp_task(
                                     })
                                     .await;
                                 lsp_data = errors.1;
+                                lsp_data.config = config.clone();
+                                lsp_data.main_channel = Some(lsp_channel.clone());
                                 let _ = sender.send(true);
                             }
                             Err(err) => {
@@ -145,17 +147,17 @@ pub fn lsp_task(
                     }
                 }
                 LspMessage::DidChange(params) => {
-                    lsp_data.did_change(params, &config);
+                    lsp_data.did_change(params);
                 }
                 LspMessage::DidSave(params) => {
-                    if let Some(errors) = lsp_data.did_save(params, &config) {
+                    if let Some(errors) = lsp_data.did_save(params) {
                         let _ = diagnostics_channel.send(errors).await;
                     }
                 }
                 LspMessage::Completion(params, sender) => {
                     let position = params.text_document_position.position;
                     let uri = params.text_document_position.text_document.uri.clone();
-                    let completion = lsp_data.completion(params, &config, can_complete);
+                    let completion = lsp_data.completion(params, can_complete);
                     let mut items = None;
 
                     if let Some(completion) = completion {
@@ -184,9 +186,7 @@ pub fn lsp_task(
                                 }
                             }
                             CompletionType::IncludedTemplate { name, range } => {
-                                if let Some(templates) =
-                                    lsp_data.read_templates(name, &config, range)
-                                {
+                                if let Some(templates) = lsp_data.read_templates(name, range) {
                                     items = Some(CompletionResponse::Array(templates));
                                 }
                             }
@@ -196,7 +196,7 @@ pub fn lsp_task(
                 }
                 LspMessage::Hover(params, sender) => {
                     let mut res = None;
-                    if let Some(hover) = lsp_data.hover(params, &config) {
+                    if let Some(hover) = lsp_data.hover(params) {
                         let filter = filters.iter().find(|name| name.name == hover);
                         if let Some(filter) = filter {
                             let markup_content = MarkupContent {
@@ -214,12 +214,12 @@ pub fn lsp_task(
                     let _ = sender.send(res);
                 }
                 LspMessage::GoToDefinition(params, sender) => {
-                    if let Some(definition) = lsp_data.goto_definition(params, &config) {
+                    if let Some(definition) = lsp_data.goto_definition(params) {
                         let _ = sender.send(Some(definition));
                     }
                 }
                 LspMessage::CodeAction(params, sender) => {
-                    if let Some(is_code_action) = lsp_data.code_action(params, &config) {
+                    if let Some(is_code_action) = lsp_data.code_action(params) {
                         if is_code_action {
                             let _ = sender.send(Some(code_actions()));
                         }
@@ -234,7 +234,7 @@ pub fn lsp_task(
                     }
                 }
                 LspMessage::DidOpen(params) => {
-                    if let Some(errors) = lsp_data.did_open(params, &config) {
+                    if let Some(errors) = lsp_data.did_open(params) {
                         let _ = diagnostics_channel.send(errors).await;
                     }
                 }

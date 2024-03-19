@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use jinja_lsp_queries::tree_builder::{JinjaDiagnostic, JinjaVariable};
 use tokio::sync::mpsc::Receiver;
 use tower_lsp::{
-    lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range, Url},
+    lsp_types::{Diagnostic, DiagnosticSeverity, MessageType, Position, Range, Url},
     Client,
 };
 
@@ -72,6 +72,7 @@ pub fn diagnostics_task(client: Client, mut receiver: Receiver<DiagnosticMessage
                         }
                     }
                 }
+                DiagnosticMessage::Str(msg) => client.log_message(MessageType::INFO, msg).await,
             }
         }
     });
@@ -82,4 +83,5 @@ pub enum DiagnosticMessage {
         diagnostics: HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
         current_file: Option<String>,
     },
+    Str(String),
 }

@@ -1,0 +1,66 @@
+{
+  "name": "jinja-lsp",
+  "description": "jinja-lsp",
+  "license": "MIT",
+  "version": "0.1.61",
+  "repository": {
+    "url": "https://github.com/uros-5/jinja-lsp"
+  },
+  "publisher": "uros-5",
+  "categories": [],
+  "keywords": [
+    "multi-root ready"
+  ],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "activationEvents": [
+    "onLanguage:jinja-html",
+    "onLanguage:rust"
+  ],
+  "main": "./client/out/extension",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Example configuration",
+      "properties": {
+        "jinja-lsp.templates": {
+          "type": "string",
+          "default": "./templates",
+          "description": "Traces the communication between VS Code and the language server."
+        },
+        "jinja-lsp.backend": {
+          "type": "array",
+          "default": [
+            "./src"
+          ],
+          "description": "Traces the communication between VS Code and the language server."
+        },
+        "jinja-lsp.lang": {
+          "type": "string",
+          "enum": [
+            "rust"
+          ],
+          "default": "rust",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "lint": "eslint ./client/src --ext .ts,.tsx",
+    "test": "sh ./scripts/e2e.sh"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^18.14.6",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "eslint": "^8.57.0",
+    "mocha": "^10.3.0",
+    "typescript": "^5.3.3"
+  }
+}

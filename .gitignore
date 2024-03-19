@@ -6,3 +6,7 @@ out/
 *.nrs
 dist/
 *.vsix
+editors/code/pnpm-lock.yaml
+editors/code/client/pnpm-lock.yaml
+editors/code/.vscode/tasks.json
+editors/code/client/package-lock.json

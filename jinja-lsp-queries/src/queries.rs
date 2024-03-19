@@ -58,7 +58,7 @@ pub static INIT: &str = r#"
         (statement
           (statement_begin)
           (keyword)
-          (identifier) @variable
+          (identifier)? @variable
           (#not-match? @variable "^(\\d)")
           _
         ) @start_statement
@@ -133,7 +133,7 @@ pub static IMPORTS: &str = r#"
     (ERROR)? @error     
     (identifier)? @id
     (statement_end)? @end 
-    (#eq? @keyword "include")
+    (#match? @keyword "^(include|from)$")
   )
   	(statement_begin)
     (keyword) @keyword  
@@ -141,6 +141,6 @@ pub static IMPORTS: &str = r#"
     (ERROR)? @error     
     (identifier)? @id
     (statement_end)? @end 
-    (#eq? @keyword "include")
+    (#match? @keyword "^(include|from)$")
 ]
 "#;

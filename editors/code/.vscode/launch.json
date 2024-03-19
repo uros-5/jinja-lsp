@@ -2,13 +2,14 @@
 {
   "version": "0.2.0",
   "configurations": [
+  
     {
       "type": "extensionHost",
       "request": "launch",
       "name": "Launch Client",
       "runtimeExecutable": "${execPath}",
       "args": [
-        "--extensionDevelopmentPath=${workspaceRoot}"
+          "--extensionDevelopmentPath=${workspaceRoot}"
       ],
       "outFiles": [
         "${workspaceRoot}/client/out/**/*.js"
@@ -18,7 +19,7 @@
         "script": "watch"
       },
       "env": {
-        "SERVER_PATH": "${workspaceRoot}/target/debug/nrs-language-server"
+        "SERVER_PATH": "/home/uros/.cache/cargo/target/debug/jinja-lsp"
       }
     },
     // {
@@ -48,8 +49,7 @@
     {
       "name": "Client + Server",
       "configurations": [
-        "Launch Client",
-        "Attach to Server"
+        "Launch Client"
       ]
     }
   ]

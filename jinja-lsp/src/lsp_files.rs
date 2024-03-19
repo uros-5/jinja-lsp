@@ -1,7 +1,9 @@
 use jinja_lsp_queries::tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType};
-use std::{collections::HashMap, fs::read_to_string, path::Path};
+use std::{collections::HashMap, fs::read_to_string, path::Path, time::Duration};
+use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
-    CompletionItemKind, CompletionTextEdit, DidOpenTextDocumentParams, TextEdit,
+    CompletionItemKind, CompletionTextEdit, DidOpenTextDocumentParams, TextDocumentIdentifier,
+    TextEdit,
 };
 
 use jinja_lsp_queries::{
@@ -25,7 +27,10 @@ use tower_lsp::lsp_types::{
 };
 use tree_sitter::{InputEdit, Point, Tree};
 
-use crate::{channels::diagnostics::DiagnosticMessage, config::JinjaConfig};
+use crate::{
+    channels::{diagnostics::DiagnosticMessage, lsp::LspMessage},
+    config::JinjaConfig,
+};
 
 pub struct LspFiles {
     trees: HashMap<LangType, HashMap<String, Tree>>,
@@ -33,6 +38,9 @@ pub struct LspFiles {
     pub parsers: Parsers,
     pub variables: HashMap<String, Vec<JinjaVariable>>,
     pub queries: Queries,
+    pub config: JinjaConfig,
+    pub diagnostics_task: JoinHandle<()>,
+    pub main_channel: Option<mpsc::Sender<LspMessage>>,
 }
 
 impl LspFiles {
@@ -165,17 +173,14 @@ impl LspFiles {
             &self.queries,
             &self.variables,
             &name.to_string(),
+            &self.config.templates,
         )
     }
 
-    pub fn did_change(
-        &mut self,
-        params: DidChangeTextDocumentParams,
-        config: &JinjaConfig,
-    ) -> Option<()> {
+    pub fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Option<()> {
         let uri = params.text_document.uri.to_string();
         let rope = self.documents.get_mut(&uri)?;
-        let lang_type = config.file_ext(&Path::new(&uri));
+        let lang_type = self.config.file_ext(&Path::new(&uri));
         let mut changes = vec![];
         for change in params.content_changes {
             let range = &change.range?;
@@ -194,17 +199,25 @@ impl LspFiles {
         for change in changes {
             self.input_edit(&uri, change.0, change.1, lang_type);
         }
+        let param = DidSaveTextDocumentParams {
+            text_document: TextDocumentIdentifier::new(params.text_document.uri),
+            text: None,
+        };
+        self.diagnostics_task.abort();
+        let channel = self.main_channel.clone();
+        self.diagnostics_task = tokio::spawn(async move {
+            sleep(Duration::from_millis(200)).await;
+            if let Some(channel) = channel {
+                let _ = channel.send(LspMessage::DidSave(param)).await;
+            }
+        });
         None
     }
 
-    pub fn did_save(
-        &mut self,
-        params: DidSaveTextDocumentParams,
-        config: &JinjaConfig,
-    ) -> Option<DiagnosticMessage> {
+    pub fn did_save(&mut self, params: DidSaveTextDocumentParams) -> Option<DiagnosticMessage> {
         let uri = params.text_document.uri.as_str();
         let path = Path::new(&uri);
-        let lang_type = config.file_ext(&path)?;
+        let lang_type = self.config.file_ext(&path)?;
         let doc = self.documents.get(uri)?;
         let mut contents = FileWriter::default();
         let _ = doc.write_to(&mut contents);
@@ -228,7 +241,6 @@ impl LspFiles {
     pub fn completion(
         &self,
         params: CompletionParams,
-        config: &JinjaConfig,
         can_complete2: bool,
     ) -> Option<CompletionType> {
         let can_complete = {
@@ -255,7 +267,7 @@ impl LspFiles {
         let row = params.text_document_position.position.line;
         let column = params.text_document_position.position.character;
         let point = Point::new(row as usize, column as usize);
-        let ext = config.file_ext(&Path::new(&uri))?;
+        let ext = self.config.file_ext(&Path::new(&uri))?;
         if ext != LangType::Template {
             return None;
         }
@@ -291,13 +303,13 @@ impl LspFiles {
         props.completion(point)
     }
 
-    pub fn hover(&self, params: HoverParams, config: &JinjaConfig) -> Option<String> {
+    pub fn hover(&self, params: HoverParams) -> Option<String> {
         let uri = &params
             .text_document_position_params
             .text_document
             .uri
             .clone();
-        let lang_type = config.file_ext(&Path::new(uri.as_str()));
+        let lang_type = self.config.file_ext(&Path::new(uri.as_str()));
         let can_hover = lang_type.map_or(false, |lang_type| lang_type == LangType::Template);
         if !can_hover {
             return None;
@@ -334,11 +346,7 @@ impl LspFiles {
         None
     }
 
-    pub fn goto_definition(
-        &self,
-        params: GotoDefinitionParams,
-        config: &JinjaConfig,
-    ) -> Option<GotoDefinitionResponse> {
+    pub fn goto_definition(&self, params: GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
         let uri = params
             .text_document_position_params
             .text_document
@@ -399,7 +407,7 @@ impl LspFiles {
                 capturer,
             );
             if let Some(last) = props.in_template(point) {
-                let uri = last.is_template(&config.templates)?;
+                let uri = last.is_template(&self.config.templates)?;
                 let start = to_position2(Point::new(0, 0));
                 let end = to_position2(Point::new(0, 0));
                 let range = Range::new(start, end);
@@ -425,13 +433,9 @@ impl LspFiles {
         res
     }
 
-    pub fn code_action(
-        &self,
-        action_params: CodeActionParams,
-        config: &JinjaConfig,
-    ) -> Option<bool> {
+    pub fn code_action(&self, action_params: CodeActionParams) -> Option<bool> {
         let uri = action_params.text_document.uri.to_string();
-        let lang_type = config.file_ext(&Path::new(&uri));
+        let lang_type = self.config.file_ext(&Path::new(&uri));
         let can_def = lang_type.map_or(false, |lang_type| lang_type == LangType::Template);
         if !can_def {
             return None;
@@ -504,12 +508,7 @@ impl LspFiles {
         None
     }
 
-    pub fn read_templates(
-        &self,
-        mut prefix: String,
-        config: &JinjaConfig,
-        range: Range,
-    ) -> Option<Vec<CompletionItem>> {
+    pub fn read_templates(&self, mut prefix: String, range: Range) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
         if prefix.is_empty() {
             prefix = String::from("file:///");
@@ -519,7 +518,7 @@ impl LspFiles {
             .filter(|template| template.contains(&prefix));
         let mut abc = vec![];
         for template in templates {
-            let c = &config.templates.replace('.', "");
+            let c = &self.config.templates.replace('.', "");
             let mut parts = template.split(c);
             parts.next();
             let label = parts.next()?.replacen('/', "", 1);
@@ -538,13 +537,9 @@ impl LspFiles {
         Some(abc)
     }
 
-    pub fn did_open(
-        &mut self,
-        params: DidOpenTextDocumentParams,
-        config: &JinjaConfig,
-    ) -> Option<DiagnosticMessage> {
+    pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {
         let name = params.text_document.uri.as_str();
-        let lang_type = config.file_ext(&Path::new(name))?;
+        let lang_type = self.config.file_ext(&Path::new(name))?;
         let file_content = params.text_document.text;
         let rope = Rope::from_str(&file_content);
         self.delete_variables(name);
@@ -567,12 +562,17 @@ impl Default for LspFiles {
         let mut trees = HashMap::new();
         trees.insert(LangType::Template, HashMap::new());
         trees.insert(LangType::Backend, HashMap::new());
+        let diagnostics_task = tokio::spawn(async move {});
+        let main_channel = None;
         Self {
             trees,
             parsers: Parsers::default(),
             variables: HashMap::new(),
             queries: Queries::default(),
             documents: HashMap::new(),
+            config: JinjaConfig::default(),
+            diagnostics_task,
+            main_channel,
         }
     }
 }
@@ -603,6 +603,7 @@ pub fn completion_kind(variable_type: DataType) -> CompletionItemKind {
         DataType::BackendVariable => CompletionItemKind::VARIABLE,
         DataType::WithVariable => CompletionItemKind::VARIABLE,
         DataType::Block => CompletionItemKind::UNIT,
+        DataType::Template => CompletionItemKind::FILE,
     }
 }
 
@@ -614,5 +615,6 @@ pub fn completion_detail(variable_type: DataType) -> &'static str {
         DataType::BackendVariable => "Backend variable.",
         DataType::WithVariable => "With variable from this file",
         DataType::Block => "Block from this file",
+        DataType::Template => "Template",
     }
 }

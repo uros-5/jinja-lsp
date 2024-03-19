@@ -26,7 +26,7 @@ pub enum JinjaKeyword {
     },
     From {
         name: String,
-        import: String,
+        from: String,
     },
     With {
         name: String,
@@ -42,6 +42,7 @@ pub enum DataType {
     BackendVariable,
     WithVariable,
     Block,
+    Template,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -100,8 +101,12 @@ impl JinjaKeyword {
                     None
                 }
             }
-            JinjaKeyword::From { name, .. } => {
-                if name.is_empty() {
+            JinjaKeyword::From { name, from } => {
+                let from2 = identifier.replace(['"', '\''], "");
+                if from.is_empty() {
+                    *from = from2;
+                    Some(())
+                } else if name.is_empty() {
                     *name = String::from(identifier);
                     Some(())
                 } else {
@@ -168,8 +173,9 @@ impl JinjaKeyword {
                 let name = JinjaVariable::new(name, data.location, DataType::Variable);
                 all.push(name);
             }
-            JinjaKeyword::From { name: _, import: _ } => {
-                //
+            JinjaKeyword::From { name: _, from } => {
+                let from = JinjaVariable::new(from, data.location, DataType::Template);
+                all.push(from);
             }
             JinjaKeyword::With { name } => {
                 let name = JinjaVariable::new(name, data.location, DataType::WithVariable);
@@ -182,7 +188,9 @@ impl JinjaKeyword {
     }
 }
 
-pub static KEYWORDS: [&str; 7] = ["for", "macro", "block", "set", "from", "import", "with"];
+pub static KEYWORDS: [&str; 8] = [
+    "for", "macro", "block", "set", "from", "import", "with", "include",
+];
 
 #[derive(Clone, Default, Debug)]
 pub struct IdentifierState {
@@ -206,6 +214,7 @@ impl IdentifierState {
                 63 => self.add_keyword(child, source),
                 1 => self.add_identifier(child, source),
                 50 => self.add_operator(child, source),
+                51 => self.add_identifier(child, source),
                 _ => (),
             }
         }
@@ -313,9 +322,9 @@ impl TryFrom<&str> for JinjaKeyword {
                 name: String::new(),
                 equals: false,
             }),
-            "from" => Some(JinjaKeyword::From {
+            "from" | "include" => Some(JinjaKeyword::From {
                 name: String::new(),
-                import: String::new(),
+                from: String::new(),
             }),
             "with" => Some(JinjaKeyword::With {
                 name: String::new(),
@@ -332,6 +341,7 @@ impl TryFrom<&str> for JinjaKeyword {
 pub enum JinjaDiagnostic {
     DefinedSomewhere,
     Undefined,
+    TemplateNotFound,
 }
 
 impl ToString for JinjaDiagnostic {
@@ -339,6 +349,7 @@ impl ToString for JinjaDiagnostic {
         match self {
             JinjaDiagnostic::Undefined => String::from("Undefined variable"),
             JinjaDiagnostic::DefinedSomewhere => String::from("Variable is defined in other file."),
+            JinjaDiagnostic::TemplateNotFound => String::from("Template not found"),
         }
     }
 }

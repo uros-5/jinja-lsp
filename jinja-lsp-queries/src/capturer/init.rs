@@ -1,12 +1,10 @@
-
-
 use tree_sitter::QueryCapture;
 
 use crate::tree_builder::{IdentifierState, JinjaVariable};
 
-use super::{Capturer};
+use super::Capturer;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct JinjaInitCapturer {
     pub data: bool,
     pub state: IdentifierState,

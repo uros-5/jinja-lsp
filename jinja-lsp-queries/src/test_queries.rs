@@ -228,6 +228,23 @@ mod query_tests {
         }
     }
 
+    #[test]
+    fn import() {
+        let source = r#"
+            {% set a = 11 %}
+            {% from "some_template" import b %}
+        "#;
+        let tree = prepare_jinja_tree(source);
+        let trigger_point = Point::default();
+        let closest_node = tree.root_node();
+        let query = Queries::default();
+
+        let query = &query.jinja_init;
+        let capturer = JinjaInitCapturer::default();
+        let props = query_props(closest_node, source, trigger_point, query, true, capturer);
+        assert_eq!(props.states.len(), 2);
+    }
+
     // #[test]
     // fn included_template_completion() {
     //     let source = r#"

@@ -183,13 +183,18 @@ impl LspFiles {
         let lang_type = self.config.file_ext(&Path::new(&uri));
         let mut changes = vec![];
         for change in params.content_changes {
-            let range = &change.range?;
-            let input_edit = range.to_input_edit(rope);
+            let range = change.range?;
+            let input_edit = rope.to_input_edit(range, &change.text);
             if change.text.is_empty() {
-                let (start, end) = range.to_byte(rope);
-                rope.remove(start..end);
+                let start = rope.to_byte(range.start);
+                let end = rope.to_byte(range.end);
+                if start <= end {
+                    rope.remove(start..end);
+                } else {
+                    rope.remove(end..start);
+                }
             } else {
-                let (start, _) = range.to_byte(rope);
+                let start = rope.to_byte(range.start);
                 rope.insert(start, &change.text);
             }
             let mut w = FileWriter::default();

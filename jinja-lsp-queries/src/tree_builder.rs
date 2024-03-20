@@ -106,12 +106,16 @@ impl JinjaKeyword {
                 if from.is_empty() {
                     *from = from2;
                     Some(())
-                } else if name.is_empty() {
-                    *name = String::from(identifier);
-                    Some(())
-                } else {
+                }
+                //else if name.is_empty() {
+                else {
                     None
                 }
+                //     *name = String::from(identifier);
+                //     Some(())
+                // } else {
+                //     None
+                // }
             }
             JinjaKeyword::With { name } => {
                 if name.is_empty() {

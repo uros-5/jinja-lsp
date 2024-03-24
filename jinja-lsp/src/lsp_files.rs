@@ -1,4 +1,7 @@
-use jinja_lsp_queries::tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType};
+use jinja_lsp_queries::{
+    search::{jinja_state::JinjaState, rust_state::RustState},
+    tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType},
+};
 use std::{collections::HashMap, fs::read_to_string, path::Path, time::Duration};
 use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
@@ -41,6 +44,8 @@ pub struct LspFiles {
     pub config: JinjaConfig,
     pub diagnostics_task: JoinHandle<()>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
+    pub jinja_variables: HashMap<String, JinjaState>,
+    pub rust_variables: HashMap<String, RustState>,
 }
 
 impl LspFiles {
@@ -52,6 +57,7 @@ impl LspFiles {
             let name = format!("file://{}", name);
             let adding = name.clone();
             self.delete_variables(&name);
+            self.delete_variables2(&name, lang_type);
             self.documents.insert(name.to_string(), rope);
             self.add_tree(&name, lang_type, &file_content);
             self.add_variables(&adding, lang_type, &file_content);
@@ -85,6 +91,15 @@ impl LspFiles {
 
     fn delete_variables(&mut self, name: &str) -> Option<()> {
         self.variables.get_mut(name)?.clear();
+        Some(())
+    }
+
+    fn delete_variables2(&mut self, name: &str, t: LangType) -> Option<()> {
+        self.variables.get_mut(name)?.clear();
+        match t {
+            LangType::Template => self.jinja_variables.get_mut(name)?.reset(),
+            LangType::Backend => self.rust_variables.get_mut(name)?.reset(),
+        };
         Some(())
     }
 
@@ -578,6 +593,8 @@ impl Default for LspFiles {
             config: JinjaConfig::default(),
             diagnostics_task,
             main_channel,
+            jinja_variables: HashMap::default(),
+            rust_variables: HashMap::default(),
         }
     }
 }

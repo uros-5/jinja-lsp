@@ -1,0 +1,259 @@
+#[cfg(test)]
+mod query_tests {
+    use tree_sitter::{Parser, Point};
+
+    use crate::search::{
+        completion_start,
+        definition::definition_query,
+        objects::{objects_query, JinjaObjects},
+        queries::Queries,
+        rust_identifiers::rust_definition_query,
+        rust_template_completion::rust_templates_query,
+        templates::templates_query,
+        CompletionType,
+    };
+
+    fn prepare_jinja_tree(text: &str) -> tree_sitter::Tree {
+        let language = tree_sitter_jinja2::language();
+        let mut parser = Parser::new();
+
+        parser
+            .set_language(language)
+            .expect("could not load jinja grammar");
+
+        parser.parse(text, None).expect("not to fail")
+    }
+
+    fn prepare_rust_tree(text: &str) -> tree_sitter::Tree {
+        let language = tree_sitter_rust::language();
+        let mut parser = Parser::new();
+
+        parser
+            .set_language(language)
+            .expect("could not load rust grammar");
+
+        parser.parse(text, None).expect("not to fail")
+    }
+
+    #[test]
+    fn jinja_definitions() {
+        let cases = [
+            (
+                r#"
+        {% macro do_something(a, b,c) %}
+            <p>Hello world</p>
+            {% set class = "button" -%}
+            {% with name = 55 %}
+                <p>Hello {{ name }}</p>
+            {% endwith %}
+        {% endmacro %}
+
+        {% for i in 10 -%}
+        {%- endfor %}
+
+        {{ point }}
+        {{ point }}        
+        "#,
+                7,
+            ),
+            (
+                r#"
+        {% with name = 55 %}
+            <p>Hello {{ name }}</p>
+            {% set a = "hello world" %}
+            {% set b %}
+                some content
+            {% endset %}
+        {% endwith %}
+        {% for i in 10 -%}
+        {%- endfor %}
+
+        {{ point }}
+        {{ point }}
+        "#,
+                4,
+            ),
+        ];
+        let query = Queries::default();
+        let query = query.jinja_definitions;
+
+        for case in cases {
+            let tree = prepare_jinja_tree(case.0);
+            let trigger_point = Point::new(0, 0);
+            // let closest_node = tree.root_node();
+            let definitions = definition_query(&query, tree, trigger_point, case.0, true);
+            assert_eq!(definitions.identifiers().len(), case.1);
+        }
+    }
+
+    #[test]
+    fn jinja_identifiers() {
+        let query = Queries::default();
+        let query = query.jinja_objects;
+        let cases = [
+            (
+                r#"
+            {{ user.id }}
+            {% for i in 10 -%}
+                {{ i }}
+            {%- endfor %}
+            {% set class = "button" -%}
+        "#,
+                4,
+            ),
+            (
+                r#"
+        {{ obj.abc obj2.abc2 }}
+
+        {{ obj3.field.something.something == obj4.something }}
+
+        {% if obj5.field -%}
+        111 {{ abc == def.abc }}
+        {% endif %}
+        "#,
+                7,
+            ),
+            (
+                r#"
+        <p> {{ something }}</p>
+        <p hx-swap="innerHTML"> {{ something | some_filter(a, b,c) }} </p>            
+        {% for i in something -%}
+            {{ i }}
+        {%- endfor %}
+        {% if something %}
+            {{ something }}
+        {% endif %}
+        "#,
+                11,
+            ),
+        ];
+        for case in cases {
+            let tree = prepare_jinja_tree(case.0);
+            let trigger_point = Point::new(0, 0);
+            let objects = objects_query(&query, tree, trigger_point, case.0, true);
+            let len = objects.show().len();
+            assert_eq!(len, case.1);
+        }
+    }
+
+    #[test]
+    fn rust_macros() {
+        let case = r#"
+            let a = context!(name => 11 + abc, abc => "username");
+            let b = context!{name, username => "username" } 
+            let price = 100;
+            let c = context!{ price };
+            jinja.add_filter("running_locally", true);        
+            jinja.add_function("some_fn", some_fn);
+        "#;
+
+        let tree = prepare_rust_tree(case);
+        let trigger_point = Point::new(0, 0);
+        let query = Queries::default();
+        let query = &query.rust_definitions;
+        let rust = rust_definition_query(query, tree, trigger_point, case, true);
+        assert_eq!(rust.show().len(), 8);
+    }
+
+    #[test]
+    fn find_jinja_completion() {
+        let source = r#"
+            {{ something |     filter1 | filter2 }}
+
+            {% if something == 11 -%}
+            {% macro example(a, b, c) -%}
+            <p> hello world</p>
+            {%- endmacro %}
+
+            {{ }}
+            {{ "|" }}
+        "#;
+        let cases = [
+            (Point::new(1, 27), Some(CompletionType::Filter)),
+            (Point::new(1, 48), None),
+            (Point::new(1, 40), Some(CompletionType::Filter)),
+            (Point::new(1, 50), Some(CompletionType::Identifier)),
+            (Point::new(3, 18), None),
+            (Point::new(4, 20), None),
+            (Point::new(3, 22), None),
+            (Point::new(8, 15), Some(CompletionType::Identifier)),
+            (Point::new(9, 18), Some(CompletionType::Identifier)),
+        ];
+        for case in cases {
+            let tree = prepare_jinja_tree(source);
+            let trigger_point = case.0;
+            let query = Queries::default();
+            let query = &query.jinja_objects;
+            let objects = objects_query(query, tree, trigger_point, source, false);
+            assert_eq!(objects.completion(trigger_point), case.1);
+            // assert!(false);
+        }
+    }
+
+    #[test]
+    fn check_jinja_templates() {
+        let source = r#"
+        <div class="bg-white overflow-hidden shadow rounded-lg border">
+            {% include 'header.jinja' %}
+            {% include 'customization.jinja' ignore missing %}
+            {% include ['page_detailed.jinja', 'page.jinja'] %}
+            {% import "header.jinja"  %}
+            {% from "page_detailed.jinja" import a %}
+        </div> 	    
+        "#;
+
+        let cases = [
+            (Point::new(2, 25), "header.jinja"),
+            (Point::new(3, 30), "customization.jinja"),
+            (Point::new(4, 36), "page_detailed.jinja"),
+            (Point::new(4, 50), "page.jinja"),
+            (Point::new(5, 34), "header.jinja"),
+            (Point::new(6, 39), "page_detailed.jinja"),
+        ];
+        for case in cases {
+            let tree = prepare_jinja_tree(source);
+            let trigger_point = case.0;
+            let query = Queries::default();
+            let query = &query.jinja_imports;
+            let templates = templates_query(query, tree, trigger_point, source, false);
+            let template = templates.in_template(trigger_point);
+            assert!(template.is_some());
+            assert_eq!(template.unwrap().get_name(trigger_point).unwrap(), case.1);
+        }
+    }
+
+    #[test]
+    fn jinja_templates_in_rust() {
+        let source = r#"
+            get_template("",11);
+            render_jinja("some_template.jinja");
+            render_jinja(1,2, 3, "some_template.jinja");
+            render_jinja(1,2, 3);
+        "#;
+        let tree = prepare_rust_tree(source);
+        let trigger_point = Point::default();
+        let query = Queries::default();
+        let query = &query.rust_templates;
+        let templates = rust_templates_query(query, tree, trigger_point, source, true);
+        assert_eq!(templates.templates.len(), 3);
+    }
+
+    #[test]
+    fn template_completion_in_rust() {
+        let source = r#"
+            let tmp2 = jinja.get_template("account3");
+            let tmp2 = jinja.get_template("account2");
+            let tmp = jinja.get_template("account");
+        "#;
+        let tree = prepare_rust_tree(source);
+        let trigger_point = Point::new(3, 47);
+        let query = Queries::default();
+        let query = &query.rust_templates;
+        let templates = rust_templates_query(query, tree, trigger_point, source, false);
+        if let Some(template) = templates.in_template(trigger_point) {
+            if let Some(completion) = completion_start(trigger_point, template) {
+                assert_eq!(completion, "accou");
+            }
+        }
+    }
+}

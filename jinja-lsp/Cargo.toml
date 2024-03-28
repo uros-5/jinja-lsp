@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp"
-version = "0.1.61"
+version = "0.1.62"
 edition = "2021"
 license = "MIT"
 authors = ["uros-5"]
@@ -25,9 +25,9 @@ serde_json = "1.0.78"
 tokio = { version = "1.17.0", features = ["full"] }
 tower-lsp = { version = "0.20.0", features = ["proposed"]}
 serde = { version = "1.0", features = ["derive"] }
-tree-sitter = "0.20.10"
+tree-sitter = "^0.20.10"
 walkdir = "2.4.0"
 anyhow = "1.0.75"
-tree-sitter-jinja2 = "0.0.5"
-tree-sitter-rust = "0.20.4"
+tree-sitter-jinja2 = "0.0.6"
+tree-sitter-rust = "^0.20.4"
 jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.61"}

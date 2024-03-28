@@ -1,4 +1,4 @@
-use jinja_lsp_queries::capturer::object::CompletionType;
+use jinja_lsp_queries::search::objects::CompletionType;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tower_lsp::{
@@ -19,7 +19,7 @@ use crate::{
     backend::code_actions,
     config::{walkdir, JinjaConfig},
     filter::init_filter_completions,
-    lsp_files::LspFiles,
+    lsp_files2::LspFiles2,
 };
 
 use super::diagnostics::DiagnosticMessage;
@@ -33,7 +33,7 @@ pub fn lsp_task(
     // let mut documents = HashMap::new();
     let mut can_complete = false;
     let mut config = JinjaConfig::default();
-    let mut lsp_data = LspFiles::default();
+    let mut lsp_data = LspFiles2::default();
     let filters = init_filter_completions();
     tokio::spawn(async move {
         while let Some(msg) = lsp_recv.recv().await {
@@ -127,10 +127,7 @@ pub fn lsp_task(
                         match walkdir(&config) {
                             Ok(errors) => {
                                 let _ = diagnostics_channel
-                                    .send(DiagnosticMessage::Errors {
-                                        diagnostics: errors.0,
-                                        current_file: None,
-                                    })
+                                    .send(DiagnosticMessage::Errors2(errors.0))
                                     .await;
                                 lsp_data = errors.1;
                                 lsp_data.config = config.clone();
@@ -197,7 +194,9 @@ pub fn lsp_task(
                 LspMessage::Hover(params, sender) => {
                     let mut res = None;
                     if let Some(hover) = lsp_data.hover(params) {
-                        let filter = filters.iter().find(|name| name.name == hover);
+                        let filter = filters
+                            .iter()
+                            .find(|name| name.name == hover.0.name && hover.1);
                         if let Some(filter) = filter {
                             let markup_content = MarkupContent {
                                 kind: MarkupKind::Markdown,

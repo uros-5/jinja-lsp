@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 
-use super::Identifier;
+use super::{Identifier, IdentifierType};
 
 #[derive(Debug)]
 pub enum Import {
@@ -23,13 +23,13 @@ pub enum Import {
 }
 
 impl Import {
-    pub fn get_name(&self, trigger_point: Point) -> Option<&str> {
+    pub fn get_identifier(&self, trigger_point: Point) -> Option<&Identifier> {
         match &self {
             Import::Extends { template }
             | Import::From { template, .. }
             | Import::Import { template, .. } => {
                 if trigger_point >= template.start && trigger_point <= template.end {
-                    Some(&template.name)
+                    Some(template)
                 } else {
                     None
                 }
@@ -38,7 +38,30 @@ impl Import {
                 let template = templates.iter().find(|template| {
                     trigger_point >= template.start && trigger_point <= template.end
                 })?;
-                Some(&template.name)
+                Some(template)
+            }
+        }
+    }
+
+    fn collect(self, ids: &mut Vec<Identifier>) {
+        match self {
+            Import::Extends { template } => ids.push(template),
+            Import::Include { templates } => {
+                for i in templates {
+                    ids.push(i);
+                }
+            }
+            Import::From {
+                template,
+                identifiers,
+            } => {
+                ids.push(template);
+                for i in identifiers {
+                    ids.push(i);
+                }
+            }
+            Import::Import { template, .. } => {
+                ids.push(template);
             }
         }
     }
@@ -59,7 +82,7 @@ pub struct JinjaImports {
 }
 
 impl JinjaImports {
-    pub fn in_template(&self, trigger_point: Point) -> Option<&Import> {
+    pub fn in_template(&self, _: Point) -> Option<&Import> {
         if let Current::Id(id) = self.current {
             let last = self.imports.get(&id)?;
             return Some(last);
@@ -129,20 +152,20 @@ impl JinjaImports {
                     let last = self.imports.get_mut(&id)?;
                     let name = capture.node.utf8_text(text.as_bytes()).ok()?;
                     let name = name.replace(['\"', '\''], "");
-                    let mut start = capture.node.start_position();
-                    start.column += 1;
-                    let mut end = capture.node.end_position();
-                    end.column -= 1;
+                    let start = capture.node.start_position();
+                    let end = capture.node.end_position();
                     match last {
                         Import::Extends { template } => {
                             if template.name.is_empty() {
                                 template.name = name;
                                 template.start = start;
                                 template.end = end;
+                                template.identifier_type = IdentifierType::JinjaTemplate;
                             }
                         }
                         Import::Include { templates } => {
-                            let template = Identifier::new(&name, start, end);
+                            let mut template = Identifier::new(&name, start, end);
+                            template.identifier_type = IdentifierType::JinjaTemplate;
                             templates.push(template);
                         }
                         Import::From { template, .. } => {
@@ -150,6 +173,7 @@ impl JinjaImports {
                                 template.name = name;
                                 template.start = start;
                                 template.end = end;
+                                template.identifier_type = IdentifierType::JinjaTemplate;
                             }
                         }
                         Import::Import { template, .. } => {
@@ -157,6 +181,7 @@ impl JinjaImports {
                                 template.name = name;
                                 template.start = start;
                                 template.end = end;
+                                template.identifier_type = IdentifierType::JinjaTemplate;
                             }
                         }
                     }
@@ -188,10 +213,16 @@ impl JinjaImports {
         }
         None
     }
+
+    pub fn collect(self, ids: &mut Vec<Identifier>) {
+        for i in self.imports {
+            i.1.collect(ids);
+        }
+    }
 }
 pub fn templates_query(
     query: &Query,
-    tree: Tree,
+    tree: &Tree,
     trigger_point: Point,
     text: &str,
     all: bool,

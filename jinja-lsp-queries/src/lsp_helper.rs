@@ -1,83 +1,138 @@
 use std::{collections::HashMap, io::ErrorKind};
 
-use tree_sitter::{Node, Point};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use tree_sitter::{Point, Tree};
 
 use crate::{
-    capturer::object::JinjaObjectCapturer,
-    queries::{query_props, Queries},
-    tree_builder::{DataType, JinjaDiagnostic, JinjaVariable},
+    search::{objects::objects_query, queries::Queries2, Identifier, IdentifierType},
+    tree_builder::{JinjaDiagnostic, LangType},
 };
 
-pub fn search_errors(
-    root: Node<'_>,
+pub fn search_errors2(
+    root: &Tree,
     source: &str,
-    query: &Queries,
-    variables: &HashMap<String, Vec<JinjaVariable>>,
+    query: &Queries2,
+    variables: &HashMap<String, Vec<Identifier>>,
     file_name: &String,
     templates: &String,
-) -> Option<Vec<(JinjaVariable, JinjaDiagnostic)>> {
-    let trigger_point = Point::new(0, 0);
-    let query = &query.jinja_idents;
-    let capturer = JinjaObjectCapturer::default();
-    let props = query_props(root, source, trigger_point, query, true, capturer);
-    let props = props.show();
-    let mut diags = vec![];
-    for object in props {
-        if object.is_filter {
-            continue;
-        }
-        let jinja_variables = variables.get(file_name)?;
-        let mut exist = false;
-        let mut err_type = JinjaDiagnostic::Undefined;
-        let mut to_warn = false;
-        // variable definition is in this file
-        let located = jinja_variables
-            .iter()
-            .filter(|variable| variable.name == object.name)
-            .filter(|variable| {
-                exist = true;
-                object.location.0 >= variable.location.0
-            });
-        let empty = located.count() == 0;
-        if empty && exist {
-            to_warn = true;
-        } else if empty {
-            to_warn = true;
-            for i in variables {
-                let temp = i.1.iter().filter(|variable| variable.name == object.name);
-
-                if temp.count() != 0 {
-                    err_type = JinjaDiagnostic::DefinedSomewhere;
+    lang_type: LangType,
+) -> Option<Vec<Diagnostic>> {
+    let mut diagnostics = vec![];
+    match lang_type {
+        LangType::Template => {
+            let trigger_point = Point::new(0, 0);
+            let query = &query.jinja_objects;
+            let objects = objects_query(query, root, trigger_point, source, true);
+            let objects = objects.show();
+            let this_file = variables.get(file_name)?;
+            for object in objects {
+                if object.is_filter {
+                    continue;
+                }
+                let mut exist = false;
+                let mut err_type = JinjaDiagnostic::Undefined;
+                let mut to_warn = false;
+                let located = this_file
+                    .iter()
+                    .filter(|variable| {
+                        variable.name == object.name
+                            && variable.identifier_type != IdentifierType::TemplateBlock
+                    })
+                    .filter(|variable| {
+                        exist = true;
+                        let bigger = object.location.1 >= variable.start;
+                        let global = variable.scope_ends.1 == Point::default();
+                        let in_scope = object.location.0 < variable.scope_ends.1;
+                        if bigger && global {
+                            true
+                        } else {
+                            bigger && in_scope
+                        }
+                    });
+                let empty = located.count() == 0;
+                if empty && exist {
                     to_warn = true;
-                    break;
+                } else if empty {
+                    to_warn = true;
+                    for file in variables {
+                        let temp = file
+                            .1
+                            .iter()
+                            .filter(|variable| variable.name == object.name);
+                        if temp.count() != 0 {
+                            err_type = JinjaDiagnostic::DefinedSomewhere;
+                            to_warn = true;
+                            break;
+                        }
+                    }
+                }
+                if to_warn {
+                    let diagnostic = create_diagnostic(
+                        &Identifier::from(&object),
+                        err_type.severity(),
+                        err_type.to_string(),
+                    );
+                    diagnostics.push(diagnostic);
                 }
             }
-        }
-        if to_warn {
-            let variable = JinjaVariable::new(&object.name, object.location, DataType::Variable);
-            diags.push((variable, err_type));
-        }
-    }
-    let jinja_variables = variables.get(file_name)?;
-    let abc = jinja_variables
-        .iter()
-        .filter(|variable| variable.data_type == DataType::Template);
-    for i in abc {
-        if i.name.is_empty() {
-            diags.push((i.clone(), JinjaDiagnostic::TemplateNotFound));
-        } else {
-            let path = format!("{templates}/{}", i.name);
-            if let Err(err) = std::fs::canonicalize(path) {
-                if err.kind() == ErrorKind::NotFound {
-                    diags.push((i.clone(), JinjaDiagnostic::TemplateNotFound));
+            let id_templates = this_file
+                .iter()
+                .filter(|identifier| identifier.identifier_type == IdentifierType::JinjaTemplate);
+            for i in id_templates {
+                let err_type = JinjaDiagnostic::TemplateNotFound;
+                if i.name.is_empty() {
+                    let diagnostic =
+                        create_diagnostic(i, err_type.severity(), err_type.to_string());
+                    diagnostics.push(diagnostic);
+                } else {
+                    let path = format!("{templates}/{}", i.name);
+                    if let Err(err) = std::fs::canonicalize(path) {
+                        if err.kind() == ErrorKind::NotFound {
+                            let diagnostic =
+                                create_diagnostic(i, err_type.severity(), err_type.to_string());
+                            diagnostics.push(diagnostic);
+                        }
+                    }
                 }
             }
+            Some(diagnostics)
+        }
+        LangType::Backend => {
+            let all_variables = variables.get(file_name)?;
+            let templates2 = all_variables
+                .iter()
+                .filter(|id| id.identifier_type == IdentifierType::JinjaTemplate);
+            for template in templates2 {
+                let path = format!("{templates}/{}", template.name);
+                if let Err(err) = std::fs::canonicalize(path) {
+                    if err.kind() == ErrorKind::NotFound {
+                        let diagnostic = create_diagnostic(
+                            template,
+                            DiagnosticSeverity::WARNING,
+                            "Template not found".to_string(),
+                        );
+                        diagnostics.push(diagnostic);
+                    }
+                }
+            }
+            Some(diagnostics)
         }
     }
+}
 
-    if diags.is_empty() {
-        None
-    } else {
-        Some(diags)
+pub fn create_diagnostic(
+    template: &Identifier,
+    severity: DiagnosticSeverity,
+    message: String,
+) -> Diagnostic {
+    Diagnostic {
+        range: Range::new(
+            Position::new(template.start.row as u32, template.start.column as u32),
+            Position::new(template.end.row as u32, template.end.column as u32),
+        ),
+        severity: Some(severity),
+        message,
+        source: Some(String::from("jinja-lsp")),
+        ..Default::default()
     }
 }

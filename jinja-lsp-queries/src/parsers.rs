@@ -12,11 +12,11 @@ impl Parsers {
         &mut self,
         lang_type: LangType,
         text: &str,
-        _old_tree: Option<&Tree>,
+        old_tree: Option<&Tree>,
     ) -> Option<Tree> {
         match lang_type {
-            LangType::Template => self.jinja.parse(text, None),
-            LangType::Backend => self.backend.parse(text, None),
+            LangType::Template => self.jinja.parse(text, old_tree),
+            LangType::Backend => self.backend.parse(text, old_tree),
         }
     }
 }

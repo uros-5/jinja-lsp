@@ -1,25 +1,28 @@
 use jinja_lsp_queries::{
-    search::{jinja_state::JinjaState, rust_state::RustState},
-    tree_builder::{DataType, JinjaDiagnostic, JinjaVariable, LangType},
+    lsp_helper::search_errors2,
+    search::{
+        completion_start, definition::definition_query, objects::objects_query, queries::Queries2,
+        rust_identifiers::rust_definition_query, rust_template_completion::rust_templates_query,
+        templates::templates_query, to_range, Identifier, IdentifierType,
+    },
+    tree_builder::LangType,
 };
-use std::{collections::HashMap, fs::read_to_string, path::Path, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::read_to_string,
+    path::Path,
+    time::Duration,
+};
 use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
-    CompletionItemKind, CompletionTextEdit, DidOpenTextDocumentParams, TextDocumentIdentifier,
-    TextEdit,
+    CompletionItemKind, CompletionTextEdit, Diagnostic, DidOpenTextDocumentParams,
+    TextDocumentIdentifier, TextEdit,
 };
 
 use jinja_lsp_queries::{
-    capturer::{
-        included::IncludeCapturer,
-        init::JinjaInitCapturer,
-        object::{CompletionType, JinjaObjectCapturer},
-        rust::RustCapturer,
-    },
-    lsp_helper::search_errors,
     parsers::Parsers,
-    queries::{query_props, Queries},
-    to_input_edit::{to_position, to_position2, ToInputEdit},
+    search::objects::CompletionType,
+    to_input_edit::{to_position2, ToInputEdit},
 };
 use ropey::Rope;
 
@@ -35,20 +38,18 @@ use crate::{
     config::JinjaConfig,
 };
 
-pub struct LspFiles {
+pub struct LspFiles2 {
     trees: HashMap<LangType, HashMap<String, Tree>>,
     documents: HashMap<String, Rope>,
     pub parsers: Parsers,
-    pub variables: HashMap<String, Vec<JinjaVariable>>,
-    pub queries: Queries,
+    pub queries2: Queries2,
     pub config: JinjaConfig,
     pub diagnostics_task: JoinHandle<()>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
-    pub jinja_variables: HashMap<String, JinjaState>,
-    pub rust_variables: HashMap<String, RustState>,
+    pub variables: HashMap<String, Vec<Identifier>>,
 }
 
-impl LspFiles {
+impl LspFiles2 {
     pub fn read_file(&mut self, path: &&Path, lang_type: LangType) -> Option<()> {
         if let Ok(name) = std::fs::canonicalize(path) {
             let name = name.to_str()?;
@@ -56,13 +57,43 @@ impl LspFiles {
             let rope = Rope::from_str(&file_content);
             let name = format!("file://{}", name);
             let adding = name.clone();
-            self.delete_variables(&name);
-            self.delete_variables2(&name, lang_type);
             self.documents.insert(name.to_string(), rope);
             self.add_tree(&name, lang_type, &file_content);
             self.add_variables(&adding, lang_type, &file_content);
         }
         None
+    }
+
+    fn add_variables(&mut self, name: &str, lang_type: LangType, file_content: &str) -> Option<()> {
+        let trees = self.trees.get(&lang_type).unwrap();
+        let tree = trees.get(name)?;
+        let trigger_point = Point::new(0, 0);
+        match lang_type {
+            LangType::Backend => {
+                let mut variables = vec![];
+                let query_defs = &self.queries2.rust_definitions;
+                let query_templates = &self.queries2.rust_templates;
+                let mut ids =
+                    rust_definition_query(query_defs, tree, trigger_point, file_content, true)
+                        .show();
+                let mut templates =
+                    rust_templates_query(query_templates, tree, trigger_point, file_content, true)
+                        .collect();
+                variables.append(&mut ids);
+                variables.append(&mut templates);
+                self.variables.insert(String::from(name), variables);
+            }
+            LangType::Template => {
+                let mut variables = vec![];
+                let query_defs = &self.queries2.jinja_definitions;
+                let mut definitions =
+                    definition_query(query_defs, tree, trigger_point, file_content, true)
+                        .identifiers();
+                variables.append(&mut definitions);
+                self.variables.insert(String::from(name), variables);
+            }
+        }
+        Some(())
     }
 
     pub fn add_tree(
@@ -89,74 +120,6 @@ impl LspFiles {
         None
     }
 
-    fn delete_variables(&mut self, name: &str) -> Option<()> {
-        self.variables.get_mut(name)?.clear();
-        Some(())
-    }
-
-    fn delete_variables2(&mut self, name: &str, t: LangType) -> Option<()> {
-        self.variables.get_mut(name)?.clear();
-        match t {
-            LangType::Template => self.jinja_variables.get_mut(name)?.reset(),
-            LangType::Backend => self.rust_variables.get_mut(name)?.reset(),
-        };
-        Some(())
-    }
-
-    fn add_variables(&mut self, name: &str, lang_type: LangType, file_content: &str) -> Option<()> {
-        let trees = self.trees.get(&lang_type).unwrap();
-        let tree = trees.get(name)?;
-        let trigger_point = Point::new(0, 0);
-        let closest_node = tree.root_node();
-        match lang_type {
-            LangType::Backend => {
-                let query = &self.queries.rust_idents;
-                let capturer = RustCapturer::default();
-                let mut variables = vec![];
-                let capturer = query_props(
-                    closest_node,
-                    file_content,
-                    trigger_point,
-                    query,
-                    true,
-                    capturer,
-                );
-
-                for variable in capturer.variables() {
-                    variables.push(JinjaVariable::new(
-                        &variable.0,
-                        variable.1,
-                        DataType::BackendVariable,
-                    ));
-                }
-                for macros in capturer.macros() {
-                    for variable in macros.1.variables() {
-                        variables.push(JinjaVariable::new(
-                            variable.0,
-                            *variable.1,
-                            DataType::BackendVariable,
-                        ));
-                    }
-                }
-                self.variables.insert(name.to_string(), variables);
-            }
-            LangType::Template => {
-                let query = &self.queries.jinja_init;
-                let capturer = JinjaInitCapturer::default();
-                let capturer = query_props(
-                    closest_node,
-                    file_content,
-                    trigger_point,
-                    query,
-                    true,
-                    capturer,
-                );
-                self.variables.insert(name.to_string(), capturer.to_vec());
-            }
-        }
-        Some(())
-    }
-
     pub fn input_edit(
         &mut self,
         file: &String,
@@ -172,24 +135,6 @@ impl LspFiles {
         let trees = self.trees.get_mut(&lang_type)?;
         trees.insert(file.to_string(), new_tree);
         None
-    }
-
-    pub fn read_tree(&self, name: &str) -> Option<Vec<(JinjaVariable, JinjaDiagnostic)>> {
-        let rope = self.documents.get(name)?;
-        let mut writter = FileWriter::default();
-        let _ = rope.write_to(&mut writter);
-        let content = writter.content;
-        let trees = self.trees.get(&LangType::Template)?;
-        let tree = trees.get(name)?;
-        let closest_node = tree.root_node();
-        search_errors(
-            closest_node,
-            &content,
-            &self.queries,
-            &self.variables,
-            &name.to_string(),
-            &self.config.templates,
-        )
     }
 
     pub fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Option<()> {
@@ -212,7 +157,7 @@ impl LspFiles {
                 let start = rope.to_byte(range.start);
                 rope.insert(start, &change.text);
             }
-            let mut w = FileWriter::default();
+            let mut w = FileContent::default();
             let _ = rope.write_to(&mut w);
             changes.push((w.content, input_edit));
         }
@@ -234,12 +179,31 @@ impl LspFiles {
         None
     }
 
+    pub fn read_tree(&self, name: &str) -> Option<Vec<Diagnostic>> {
+        let rope = self.documents.get(name)?;
+        let mut writter = FileContent::default();
+        let _ = rope.write_to(&mut writter);
+        let content = writter.content;
+        let lang_type = self.config.file_ext(&Path::new(name))?;
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(name)?;
+        search_errors2(
+            tree,
+            &content,
+            &self.queries2,
+            &self.variables,
+            &name.to_string(),
+            &self.config.templates,
+            lang_type,
+        )
+    }
+
     pub fn did_save(&mut self, params: DidSaveTextDocumentParams) -> Option<DiagnosticMessage> {
         let uri = params.text_document.uri.as_str();
         let path = Path::new(&uri);
         let lang_type = self.config.file_ext(&path)?;
         let doc = self.documents.get(uri)?;
-        let mut contents = FileWriter::default();
+        let mut contents = FileContent::default();
         let _ = doc.write_to(&mut contents);
         let content = contents.content;
         self.delete_variables(uri);
@@ -251,10 +215,7 @@ impl LspFiles {
         } else {
             hm.insert(uri.to_owned(), vec![]);
         }
-        let message = DiagnosticMessage::Errors {
-            diagnostics: hm,
-            current_file: Some(uri.to_owned()),
-        };
+        let message = DiagnosticMessage::Errors2(hm);
         Some(message)
     }
 
@@ -288,42 +249,53 @@ impl LspFiles {
         let column = params.text_document_position.position.character;
         let point = Point::new(row as usize, column as usize);
         let ext = self.config.file_ext(&Path::new(&uri))?;
-        if ext != LangType::Template {
-            return None;
-        }
-        let trees = self.trees.get(&LangType::Template)?;
+        let trees = self.trees.get(&ext)?;
         let tree = trees.get(&uri)?;
-        let closest_node = tree.root_node();
-        let query = &self.queries.jinja_idents;
-        let capturer = JinjaObjectCapturer::default();
         let doc = self.documents.get(&uri)?;
-        let mut writter = FileWriter::default();
+        let mut writter = FileContent::default();
         let _ = doc.write_to(&mut writter);
-        let props = query_props(
-            closest_node,
-            &writter.content,
-            point,
-            query,
-            false,
-            capturer,
-        );
-        if let Some(completion) = props.completion(point) {
-            return Some(completion);
+        match ext {
+            LangType::Template => {
+                let query = &self.queries2.jinja_objects;
+                let objects = objects_query(query, tree, point, &writter.content, false);
+                if let Some(completion) = objects.completion(point) {
+                    return Some(completion);
+                }
+                let query = &self.queries2.jinja_imports;
+                let query = templates_query(query, tree, point, &writter.content, false);
+                let identifier = query.in_template(point)?.get_identifier(point)?;
+                let start = completion_start(point, identifier)?;
+                let range = to_range((identifier.start, identifier.end));
+                Some(CompletionType::IncludedTemplate {
+                    name: start.to_owned(),
+                    range,
+                })
+            }
+            LangType::Backend => {
+                let rust_templates = rust_templates_query(
+                    &self.queries2.rust_templates,
+                    tree,
+                    point,
+                    &writter.content,
+                    false,
+                );
+                let identifier = rust_templates.in_template(point)?;
+                let start = completion_start(point, identifier)?;
+                let range = to_range((identifier.start, identifier.end));
+                Some(CompletionType::IncludedTemplate {
+                    name: start.to_owned(),
+                    range,
+                })
+            }
         }
-        let query = &self.queries.jinja_imports;
-        let capturer = IncludeCapturer::default();
-        let props = query_props(
-            closest_node,
-            &writter.content,
-            point,
-            query,
-            false,
-            capturer,
-        );
-        props.completion(point)
     }
 
-    pub fn hover(&self, params: HoverParams) -> Option<String> {
+    fn delete_variables(&mut self, uri: &str) -> Option<()> {
+        self.variables.get_mut(uri)?.clear();
+        Some(())
+    }
+
+    pub fn hover(&self, params: HoverParams) -> Option<(Identifier, bool)> {
         let uri = &params
             .text_document_position_params
             .text_document
@@ -342,27 +314,23 @@ impl LspFiles {
             .to_string();
         let row = params.text_document_position_params.position.line;
         let column = params.text_document_position_params.position.character;
-        let point = Point::new(row as usize, column as usize);
+        let trigger_point = Point::new(row as usize, column as usize);
         let trees = self.trees.get(&LangType::Template)?;
         let tree = trees.get(&uri)?;
-        let closest_node = tree.root_node();
-        let query = &self.queries.jinja_idents;
-        let capturer = JinjaObjectCapturer::default();
+        let query = &self.queries2.jinja_objects;
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
-        let props = query_props(
-            closest_node,
-            &writter.content,
-            point,
-            query,
-            false,
-            capturer,
-        );
-        if props.is_hover(point) {
-            let id = props.get_last_id()?;
-            return Some(id);
+        let objects = objects_query(query, tree, trigger_point, &writter.content, false);
+        if objects.is_hover(trigger_point) {
+            let object = objects.get_last_id()?;
+            if object.is_filter {
+                return Some((Identifier::from(object), true));
+            }
         }
+        // else if objects.is_ident(point) {
+
+        // }
         None
     }
 
@@ -377,80 +345,92 @@ impl LspFiles {
             .text_document
             .uri
             .clone();
+        let lang_type = self.config.file_ext(&Path::new(&uri))?;
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(&uri)?;
         let row = params.text_document_position_params.position.line;
         let column = params.text_document_position_params.position.character;
         let point = Point::new(row as usize, column as usize);
-        let trees = self.trees.get(&LangType::Template)?;
-        let tree = trees.get(&uri)?;
-        let closest_node = tree.root_node();
-        let mut current_ident = String::new();
-
-        let query = &self.queries.jinja_idents;
-        let capturer = JinjaObjectCapturer::default();
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
-        let props = query_props(
-            closest_node,
-            &writter.content,
-            point,
-            query,
-            false,
-            capturer,
-        );
-        let mut res = props.is_ident(point).and_then(|ident| {
-            current_ident = ident.to_string();
-            let variables = self.variables.get(&uri)?;
-            let max = variables
-                .iter()
-                .filter(|item| item.name == ident && item.location.0 <= point)
-                .max()?;
-            let (start, end) = to_position(max);
-            let range = Range::new(start, end);
-            Some(GotoDefinitionResponse::Scalar(Location {
-                uri: uri2.clone(),
-                range,
-            }))
-        });
-        res.is_none().then(|| -> Option<()> {
-            let query = &self.queries.jinja_imports;
-            let capturer = IncludeCapturer::default();
-            let doc = self.documents.get(&uri)?;
-            let mut writter = FileWriter::default();
-            let _ = doc.write_to(&mut writter);
-            let props = query_props(
-                closest_node,
-                &writter.content,
-                point,
-                query,
-                false,
-                capturer,
-            );
-            if let Some(last) = props.in_template(point) {
-                let uri = last.is_template(&self.config.templates)?;
-                let start = to_position2(Point::new(0, 0));
-                let end = to_position2(Point::new(0, 0));
-                let range = Range::new(start, end);
-                let location = Location { uri, range };
-                res = Some(GotoDefinitionResponse::Scalar(location));
-                None
-            } else {
-                let mut all: Vec<Location> = vec![];
-                for i in &self.variables {
-                    let idents = i.1.iter().filter(|item| item.name == current_ident);
-                    for id in idents {
-                        let uri = Url::parse(i.0).unwrap();
-                        let (start, end) = to_position(id);
-                        let range = Range::new(start, end);
-                        let location = Location { uri, range };
-                        all.push(location);
+
+        let mut current_ident = String::new();
+
+        match lang_type {
+            LangType::Template => {
+                let query = &self.queries2.jinja_objects;
+                let objects = objects_query(query, tree, point, &writter.content, false);
+                let mut res = objects.is_ident(point).and_then(|ident| {
+                    current_ident = ident.to_owned();
+                    let variables = self.variables.get(&uri)?;
+                    let max = variables
+                        .iter()
+                        .filter(|item| {
+                            item.name == ident && item.start <= point && point <= item.scope_ends.1
+                        })
+                        .max()?;
+                    let (start, end) = (to_position2(max.start), to_position2(max.end));
+                    let range = Range::new(start, end);
+                    Some(GotoDefinitionResponse::Scalar(Location {
+                        uri: uri2.clone(),
+                        range,
+                    }))
+                });
+                res.is_none().then(|| -> Option<()> {
+                    let query = &self.queries2.jinja_imports;
+                    let query = templates_query(query, tree, point, &writter.content, false);
+                    let identifier = query.in_template(point)?.get_identifier(point)?;
+                    let dir = &self.config.templates;
+                    let path = format!("{dir}/{}", identifier.name);
+                    let buffer = std::fs::canonicalize(path).ok()?;
+                    let url = format!("file://{}", buffer.to_str()?);
+                    let url = Url::parse(&url).ok()?;
+                    let start = to_position2(identifier.start);
+                    let end = to_position2(identifier.end);
+                    let range = Range::new(start, end);
+                    let location = Location::new(url, range);
+                    res = Some(GotoDefinitionResponse::Scalar(location));
+                    None
+                });
+                res.is_none().then(|| -> Option<()> {
+                    let mut all: Vec<Location> = vec![];
+                    for file in &self.variables {
+                        if file.0 == &uri {
+                            continue;
+                        }
+                        let variables = file.1.iter().filter(|item| item.name == current_ident);
+                        for variable in variables {
+                            let uri = Url::parse(file.0).unwrap();
+                            let start = to_position2(variable.start);
+                            let end = to_position2(variable.end);
+                            let range = Range::new(start, end);
+                            let location = Location::new(uri, range);
+                            all.push(location);
+                        }
                     }
-                }
-                res = Some(GotoDefinitionResponse::Array(all));
-                None
+                    res = Some(GotoDefinitionResponse::Array(all));
+                    None
+                });
+                res
             }
-        });
-        res
+
+            LangType::Backend => {
+                let query = &self.queries2.rust_templates;
+                let templates = rust_templates_query(query, tree, point, &writter.content, false);
+                let template = templates.in_template(point)?;
+                let dir = &self.config.templates;
+                let path = format!("{dir}/{}", template.name);
+                let buffer = std::fs::canonicalize(path).ok()?;
+                let url = format!("file://{}", buffer.to_str()?);
+                let url = Url::parse(&url).ok()?;
+                let start = to_position2(template.start);
+                let end = to_position2(template.end);
+                let range = Range::new(start, end);
+                let location = Location::new(url, range);
+                Some(GotoDefinitionResponse::Scalar(location))
+            }
+        }
     }
 
     pub fn code_action(&self, action_params: CodeActionParams) -> Option<bool> {
@@ -465,25 +445,15 @@ impl LspFiles {
         let point = Point::new(row as usize, column as usize);
         let trees = self.trees.get(&LangType::Template)?;
         let tree = trees.get(&uri)?;
-        let closest_node = tree.root_node();
-        let _current_ident = String::new();
-        let query = &self.queries.jinja_idents;
-        let capturer = JinjaObjectCapturer::default();
+        let query = &self.queries2.jinja_objects;
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
-        let props = query_props(
-            closest_node,
-            &writter.content,
-            point,
-            query,
-            false,
-            capturer,
-        );
-        Some(props.in_expr(point))
+        let objects = objects_query(query, tree, point, &writter.content, false);
+        Some(objects.in_expr(point))
     }
 
-    pub fn read_trees(&self, diags: &mut HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>) {
+    pub fn read_trees(&self, diags: &mut HashMap<String, Vec<Diagnostic>>) {
         for tree in self.trees.get(&LangType::Template).unwrap() {
             let errors = self.read_tree(tree.0);
             if let Some(errors) = errors {
@@ -493,39 +463,45 @@ impl LspFiles {
     }
 
     pub fn read_variables(&self, uri: &Url, position: Position) -> Option<Vec<CompletionItem>> {
+        let mut items = vec![];
         let start = position.line as usize;
         let end = position.character as usize;
         let position = Point::new(start, end);
         let uri = &uri.to_string();
-        let variables = self.variables.get(uri)?;
-        let mut items = vec![];
-        for variable in variables.iter() {
-            if position < variable.location.1 {
-                continue;
-            }
-            items.push(CompletionItem {
-                label: variable.name.to_string(),
-                detail: Some(completion_detail(variable.data_type).to_string()),
-                kind: Some(completion_kind(variable.data_type)),
-                ..Default::default()
+        let mut names = HashSet::new();
+        let this_file = self.variables.get(uri)?;
+        let this_file = this_file
+            .iter()
+            .filter(|variable| variable.identifier_type != IdentifierType::TemplateBlock)
+            .filter(|variable| {
+                let bigger = position >= variable.end;
+                let in_scope = position <= variable.scope_ends.1;
+                bigger && in_scope
             });
+        for identifier in this_file {
+            if !names.contains(&identifier.name) {
+                names.insert(&identifier.name);
+                items.push(CompletionItem {
+                    label: identifier.name.to_string(),
+                    detail: Some(identifier.identifier_type.completion_detail().to_owned()),
+                    kind: Some(identifier.identifier_type.completion_kind()),
+                    ..Default::default() // detail: Some()
+                });
+            }
         }
         for file in self.variables.iter() {
             for variable in file.1 {
-                if variable.data_type == DataType::BackendVariable {
+                if variable.identifier_type == IdentifierType::BackendVariable {
                     items.push(CompletionItem {
                         label: variable.name.to_string(),
-                        detail: Some(completion_detail(variable.data_type).to_string()),
-                        kind: Some(completion_kind(variable.data_type)),
-                        ..Default::default()
+                        detail: Some(variable.identifier_type.completion_detail().to_owned()),
+                        kind: Some(variable.identifier_type.completion_kind()),
+                        ..Default::default() // detail: Some()
                     });
                 }
             }
         }
-        if !items.is_empty() {
-            return Some(items);
-        }
-        None
+        Some(items)
     }
 
     pub fn read_templates(&self, mut prefix: String, range: Range) -> Option<Vec<CompletionItem>> {
@@ -569,15 +545,12 @@ impl LspFiles {
         let diagnostics = self.read_tree(name)?;
         let mut hm = HashMap::new();
         hm.insert(name.to_owned(), diagnostics);
-        let msg = DiagnosticMessage::Errors {
-            diagnostics: hm,
-            current_file: Some(name.to_owned()),
-        };
+        let msg = DiagnosticMessage::Errors2(hm);
         Some(msg)
     }
 }
 
-impl Default for LspFiles {
+impl Default for LspFiles2 {
     fn default() -> Self {
         let mut trees = HashMap::new();
         trees.insert(LangType::Template, HashMap::new());
@@ -587,15 +560,31 @@ impl Default for LspFiles {
         Self {
             trees,
             parsers: Parsers::default(),
-            variables: HashMap::new(),
-            queries: Queries::default(),
+            queries2: Queries2::default(),
             documents: HashMap::new(),
             config: JinjaConfig::default(),
             diagnostics_task,
             main_channel,
-            jinja_variables: HashMap::default(),
-            rust_variables: HashMap::default(),
+            variables: HashMap::default(),
         }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct FileContent {
+    pub content: String,
+}
+
+impl std::io::Write for FileContent {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if let Ok(b) = std::str::from_utf8(buf) {
+            self.content.push_str(b);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -614,29 +603,5 @@ impl std::io::Write for FileWriter {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
-    }
-}
-
-pub fn completion_kind(variable_type: DataType) -> CompletionItemKind {
-    match variable_type {
-        DataType::Macro => CompletionItemKind::FUNCTION,
-        DataType::MacroParameter => CompletionItemKind::FIELD,
-        DataType::Variable => CompletionItemKind::VARIABLE,
-        DataType::BackendVariable => CompletionItemKind::VARIABLE,
-        DataType::WithVariable => CompletionItemKind::VARIABLE,
-        DataType::Block => CompletionItemKind::UNIT,
-        DataType::Template => CompletionItemKind::FILE,
-    }
-}
-
-pub fn completion_detail(variable_type: DataType) -> &'static str {
-    match variable_type {
-        DataType::Macro => "Macro from this file",
-        DataType::MacroParameter => "Macro parameter from this file",
-        DataType::Variable => "Variable from this file",
-        DataType::BackendVariable => "Backend variable.",
-        DataType::WithVariable => "With variable from this file",
-        DataType::Block => "Block from this file",
-        DataType::Template => "Template",
     }
 }

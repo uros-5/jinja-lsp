@@ -1,20 +1,21 @@
+use tower_lsp::lsp_types::Range;
 use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
-
-use super::CompletionType;
 
 #[derive(Default, Debug, Clone)]
 pub struct JinjaObject {
     pub name: String,
     pub location: (Point, Point),
+    pub is_filter: bool,
     fields: Vec<(String, (Point, Point))>,
 }
 
 impl JinjaObject {
-    pub fn new(name: String, start: Point, end: Point) -> Self {
+    pub fn new(name: String, start: Point, end: Point, is_filter: bool) -> Self {
         Self {
             name,
             location: (start, end),
             fields: vec![],
+            is_filter,
         }
     }
 
@@ -73,16 +74,30 @@ impl JinjaObjects {
                     .is_none()
                 {
                     true => {
-                        self.objects
-                            .push(JinjaObject::new(String::from(value), start, end));
+                        // TODO: in future add those to main library
+                        if VALID_IDENTIFIERS.contains(&value) {
+                            return;
+                        }
                         self.ident = (start, end);
+                        let is_filter = self.is_hover(start);
+                        self.objects.push(JinjaObject::new(
+                            String::from(value),
+                            start,
+                            end,
+                            is_filter,
+                        ));
                     }
                     false => (),
                 }
             } else {
-                self.objects
-                    .push(JinjaObject::new(String::from(value), start, end));
+                // TODO: in future add those to main library
+                if VALID_IDENTIFIERS.contains(&value) {
+                    return;
+                }
                 self.ident = (start, end);
+                let is_filter = self.is_hover(start);
+                self.objects
+                    .push(JinjaObject::new(String::from(value), start, end, is_filter));
             }
         }
     }
@@ -104,6 +119,24 @@ impl JinjaObjects {
         trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.1
     }
 
+    pub fn is_ident(&self, trigger_point: Point) -> Option<String> {
+        if trigger_point >= self.ident.0 && trigger_point <= self.ident.1 {
+            self.objects.last().map(|last| last.name.to_string())
+        } else {
+            None
+        }
+    }
+
+    pub fn is_hover(&self, trigger_point: Point) -> bool {
+        trigger_point >= self.ident.0
+            && trigger_point <= self.ident.1
+            && self.pipe.1 == self.ident.0
+    }
+
+    pub fn get_last_id(&self) -> Option<&JinjaObject> {
+        self.objects.last()
+    }
+
     pub fn show(&self) -> Vec<JinjaObject> {
         self.objects.clone()
     }
@@ -111,7 +144,7 @@ impl JinjaObjects {
 
 pub fn objects_query(
     query: &Query,
-    tree: Tree,
+    tree: &Tree,
     trigger_point: Point,
     text: &str,
     all: bool,
@@ -120,7 +153,7 @@ pub fn objects_query(
     let mut objects = JinjaObjects::default();
     let mut cursor_qry = QueryCursor::new();
     let capture_names = query.capture_names();
-    let matches = cursor_qry.matches(&query, closest_node, text.as_bytes());
+    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
     let captures = matches.into_iter().flat_map(|m| {
         m.captures
             .iter()
@@ -132,3 +165,12 @@ pub fn objects_query(
     }
     objects
 }
+
+#[derive(PartialEq, Debug)]
+pub enum CompletionType {
+    Filter,
+    Identifier,
+    IncludedTemplate { name: String, range: Range },
+}
+
+static VALID_IDENTIFIERS: [&str; 4] = ["loop", "true", "false", "not"];

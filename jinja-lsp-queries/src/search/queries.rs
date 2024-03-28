@@ -1,7 +1,7 @@
 use tree_sitter::Query;
 
 #[derive(Debug)]
-pub struct Queries {
+pub struct Queries2 {
     pub jinja_definitions: Query,
     pub jinja_objects: Query,
     pub jinja_imports: Query,
@@ -9,13 +9,13 @@ pub struct Queries {
     pub rust_templates: Query,
 }
 
-impl Clone for Queries {
+impl Clone for Queries2 {
     fn clone(&self) -> Self {
         Self::default()
     }
 }
 
-impl Default for Queries {
+impl Default for Queries2 {
     fn default() -> Self {
         Self {
             jinja_definitions: Query::new(tree_sitter_jinja2::language(), DEFINITIONS).unwrap(),
@@ -28,6 +28,7 @@ impl Default for Queries {
 }
 
 const DEFINITIONS: &str = r#"
+
 
 (
   [
@@ -65,17 +66,7 @@ const DEFINITIONS: &str = r#"
       (identifier) @for_items
       (_)? @other
       (statement_end) @range_start
-    ) @for_start        
-
-    (
-      (statement
-        (statement_begin) @range_end
-        (keyword) @end_keyword
-        (statement_end) 
-        (#eq? @end_keyword "endfor")
-      )
-    ) @for_end
-
+    ) @for        
 
     (
       (statement
@@ -92,15 +83,6 @@ const DEFINITIONS: &str = r#"
       )
     ) @set
     
-    (
-      (statement
-        (statement_begin) @range_end
-        (keyword) @endset_keyword
-        (statement_end)
-        (#eq? @endset_keyword "endset")
-      )
-    ) @endset
-
     (statement
       (statement_begin)
       (keyword) @with_keyword
@@ -109,13 +91,6 @@ const DEFINITIONS: &str = r#"
       (#not-match? @with_identifier "(^\\d+$)")
       (statement_end) @range_start
     ) @with
-
-    (statement
-      (statement_begin) @range_end
-      (keyword) @end_with
-      (#eq? @end_with "endwith")
-      (statement_end)
-    ) @endwith
 
     (statement
       (statement_begin)
@@ -127,13 +102,6 @@ const DEFINITIONS: &str = r#"
     ) @macro
 
     (statement
-      (statement_begin) @range_end
-      (keyword) @endmacro_keyword
-      (#eq? @endmacro_keyword "endmacro")
-      (statement_end) 
-    ) @endmacro
-
-    (statement
       (statement_begin)
       (keyword) @block_keyword
       (identifier) @block_identifier
@@ -141,15 +109,60 @@ const DEFINITIONS: &str = r#"
       (#not-match? @block_identifier "(^\\d+$)")
       (statement_end) @range_start
     ) @block
+    
+    
+    (statement
+    	(statement_begin)
+        (keyword) @ifkeyword
+        (#eq? @ifkeyword "if")
+        (statement_end) @range_start
+    ) @if
+    
+    (statement
+    	(statement_begin)
+        (keyword) @elifkeyword
+        (#eq? @elifkeyword "elif")
+        (statement_end) @range_start
+    ) @elif
 
     (statement
-      (statement_begin) @range_end
-      (keyword) @end_block_keyword
-      (#eq? @end_block_keyword "endblock")
-      (statement_end)
-    ) @endblock
+    	(statement_begin)
+        (keyword) @elsekeyword
+        (#eq? @elsekeyword "else")
+        (statement_end) @range_start
+    ) @else
+    
+    
+    (statement
+        (statement_begin)
+        (keyword) @filterkeyword
+        (#eq? @filterkeyword "filter")
+        (statement_end) @range_start
+    ) @filter
+    
+    (statement
+        (statement_begin)
+        (keyword) @autokeyword
+        (#eq? @autokeyword "autoescape")
+        (statement_end) @range_start
+    ) @autoescape
+    
+    (statement
+        (statement_begin)
+        (keyword) @rawkeyword
+        (#eq? @rawkeyword "raw")
+        (statement_end) @range_start
+    ) @raw
   ]
 )
+[
+	(statement
+      (statement_begin) @range_end
+      (keyword) @endkeyword
+      (#match? @endkeyword "^end")
+      (statement_end)
+    ) @ended
+]
 
 "#;
 
@@ -194,11 +207,11 @@ pub static RUST_DEFINITIONS: &str = r#"
             (field_identifier) @method
         )
         (arguments
-        	(string_literal) @name
+        	(string_literal)+ @name
         )
     
         (#eq? @jinja "jinja")
-        (#any-of? @method "add_global" add_filter" add_function")
+        (#match? @method "(add_global|add_filter|add_function)")
     
     ) @function
 ])
@@ -261,15 +274,16 @@ const RUST_TEMPLATES: &str = r#"
         	(field_identifier) @method_name
         )
         (identifier) @method_name
+        (#any-of? @method_name "render_jinja" "get_template")
+      ;;(#match? @method_name "(render_jinja|get_template)")
     ]
     (arguments
       (string_literal)+ @template_name
     )
-    (#any-of? @method_name "render_jinja" "get_template")
 )
 "#;
 
-const JINJA_SNIPPETS: &str = r#"
+const _JINJA_SNIPPETS: &str = r#"
 [
 	(statement) @block
     (ERROR

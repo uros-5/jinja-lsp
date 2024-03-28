@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 
-use super::Identifier;
+use super::{Identifier, IdentifierType};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub enum Current {
@@ -18,8 +16,8 @@ pub struct RustIdentifiers {
 }
 
 impl RustIdentifiers {
-    pub fn show(&self) -> &Vec<Identifier> {
-        &self.variables
+    pub fn show(self) -> Vec<Identifier> {
+        self.variables
     }
 
     pub fn check(&mut self, name: &str, capture: &QueryCapture<'_>, text: &str) -> Option<()> {
@@ -37,7 +35,8 @@ impl RustIdentifiers {
                         return None;
                     }
                     let name = capture.node.utf8_text(text.as_bytes()).ok()?;
-                    let identifier = Identifier::new(name, start, end);
+                    let mut identifier = Identifier::new(name, start, end);
+                    identifier.identifier_type = IdentifierType::BackendVariable;
                     self.variables.push(identifier);
                 }
             }
@@ -45,7 +44,9 @@ impl RustIdentifiers {
                 let start = capture.node.start_position();
                 let end = capture.node.end_position();
                 let name = capture.node.utf8_text(text.as_bytes()).ok()?;
-                let identifier = Identifier::new(name, start, end);
+                let name = name.replace(['\"', '\''], "");
+                let mut identifier = Identifier::new(&name, start, end);
+                identifier.identifier_type = IdentifierType::BackendVariable;
                 self.variables.push(identifier);
             }
             _ => (),
@@ -56,7 +57,7 @@ impl RustIdentifiers {
 
 pub fn rust_definition_query(
     query: &Query,
-    tree: Tree,
+    tree: &Tree,
     trigger_point: Point,
     text: &str,
     all: bool,
@@ -65,7 +66,7 @@ pub fn rust_definition_query(
     let mut cursor_qry = QueryCursor::new();
     let mut rust = RustIdentifiers::default();
     let capture_names = query.capture_names();
-    let matches = cursor_qry.matches(&query, closest_node, text.as_bytes());
+    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
     let captures = matches.into_iter().flat_map(|m| {
         m.captures
             .iter()

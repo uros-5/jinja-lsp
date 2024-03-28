@@ -1,83 +1,33 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, LinkedList};
 
 use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 
-use super::Identifier;
-
-macro_rules! range_start {
-    ($self: ident, $capture: ident, $member: ident) => {
-        let def = $self.last()?;
-        if let Definition::$member { start, .. } = def {
-            let end_point = $capture.node.end_position();
-            *start = end_point;
-            $self.current = Current::NoDefinition;
-        }
-    };
-}
-
-macro_rules! range_end {
-    ($self: ident, $capture: ident, $member: ident) => {
-        let id = $capture.node.id();
-        $self.current = Current::NoDefinition;
-        let v = $self.end.get_mut(&Current::$member)?;
-        let item = v.iter().find(|i| i.0 == id);
-        if item.is_none() {
-            v.push(($capture.node.id(), $capture.node.start_position()));
-        }
-    };
-}
+use super::{Identifier, IdentifierType};
 
 #[derive(Debug, Clone)]
 pub enum Definition {
     ForLoop {
-        id: usize,
         key: Identifier,
         value: Option<Identifier>,
-        start: Point,
-        end: Point,
-        open_par: bool,
-        comma: bool,
-        closed_par: bool,
     },
     Set {
-        id: usize,
         key: Identifier,
-        start: Point,
-        end: Point,
         equals: bool,
     },
     With {
-        id: usize,
         keys: Vec<Identifier>,
-        start: Point,
-        end: Point,
     },
     Macro {
-        id: usize,
         keys: Vec<Identifier>,
-        start: Point,
-        end: Point,
+        scope: usize,
     },
     Block {
-        id: usize,
         name: Identifier,
-        start: Point,
-        end: Point,
     },
 }
 
 impl Definition {
-    pub fn id(&self) -> &usize {
-        match &self {
-            Definition::ForLoop { id, .. } => id,
-            Definition::Set { id, .. } => id,
-            Definition::With { id, .. } => id,
-            Definition::Macro { id, .. } => id,
-            Definition::Block { id, .. } => id,
-        }
-    }
-
-    fn key<'a>(&'a self, ids: &mut Vec<&'a Identifier>) {
+    fn collect(self, ids: &mut Vec<Identifier>) {
         match self {
             Definition::ForLoop { key, .. } => {
                 ids.push(key);
@@ -109,104 +59,150 @@ pub enum Current {
     With,
     Macro,
     Block,
+    If,
+    Else,
+    Filter,
+    Autoescape,
+    Raw,
     #[default]
     NoDefinition,
 }
 
-#[derive(Default)]
+impl Current {
+    fn from_end(name: &str) -> Self {
+        match name {
+            "endfor" => Self::For,
+            "endset" => Self::Set,
+            "endwith" => Self::With,
+            "endmacro" => Self::Macro,
+            "endblock" => Self::Block,
+            "endif" => Self::If,
+            "endelse" => Self::Else,
+            "endfilter" => Self::Filter,
+            "endautoescape" => Self::Autoescape,
+            "endraw" => Self::Raw,
+            _ => Self::NoDefinition,
+        }
+    }
+
+    fn from_rest(name: &str) -> Self {
+        match name {
+            "for" => Current::For,
+            "set" => Current::Set,
+            "with" => Current::With,
+            "macro" => Current::Macro,
+            "block" => Current::Block,
+            "if" | "elseif" => Current::If,
+            "else" => Current::Else,
+            "filter" => Current::Filter,
+            "autoescape" => Current::Autoescape,
+            "raw" => Current::Raw,
+            _ => Current::NoDefinition,
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Scope {
+    id: usize,
+    start: Point,
+    end: Point,
+}
+
+impl Scope {
+    pub fn new(end: Point) -> Self {
+        Self {
+            id: 0,
+            start: Point::default(),
+            end,
+        }
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct JinjaDefinitions {
     pub definitions: Vec<Definition>,
-    pub current: Current,
-    pub end: HashMap<Current, Vec<(usize, Point)>>,
+    pub current_definition: Current,
+    pub current_scope: LinkedList<Scope>,
+    pub all_scopes: Vec<Scope>,
+    all_ids: HashSet<usize>,
+    pub in_end: bool,
 }
 
 impl JinjaDefinitions {
-    pub fn init_end(&mut self) {
-        self.end.insert(Current::For, vec![]);
-        self.end.insert(Current::Set, vec![]);
-        self.end.insert(Current::With, vec![]);
-        self.end.insert(Current::Macro, vec![]);
-        self.end.insert(Current::Block, vec![]);
-        self.end.insert(Current::NoDefinition, vec![]);
-    }
-    pub fn last(&mut self) -> Option<&mut Definition> {
-        self.definitions.last_mut()
-    }
-
     pub fn exist(&self, id: usize) -> bool {
-        self.definitions.iter().any(|item| item.id() == &id)
+        self.all_ids.iter().any(|item| item == &id)
     }
 
     pub fn add(&mut self, id: usize, current: Current) {
-        self.current = current;
+        self.current_definition = current;
+        let mut def = None;
+        let mut add_scope = false;
         match current {
             Current::For => {
-                let d = Definition::ForLoop {
-                    id,
+                def = Some(Definition::ForLoop {
                     key: Identifier::default(),
                     value: None,
-                    start: Point::default(),
-                    end: Point::default(),
-                    open_par: false,
-                    comma: false,
-                    closed_par: false,
-                };
-                self.definitions.push(d);
+                });
+                add_scope = true;
             }
             Current::Set => {
-                let d = Definition::Set {
-                    id,
+                // if !self.all_ids.contains(&id) {
+                self.all_ids.insert(id);
+                def = Some(Definition::Set {
                     key: Identifier::default(),
-                    start: Point::default(),
-                    end: Point::default(),
                     equals: false,
-                };
-                self.definitions.push(d);
+                });
+                // }
             }
             Current::With => {
-                let d = Definition::With {
-                    id,
-                    keys: vec![],
-                    start: Point::default(),
-                    end: Point::default(),
-                };
-                self.definitions.push(d);
+                def = Some(Definition::With { keys: vec![] });
+                add_scope = true;
             }
             Current::Macro => {
-                let d = Definition::Macro {
-                    id,
+                def = Some(Definition::Macro {
                     keys: vec![],
-                    start: Point::default(),
-                    end: Point::default(),
-                };
-                self.definitions.push(d);
+                    scope: self.current_scope.front().unwrap_or(&Scope::default()).id,
+                });
+                add_scope = true;
             }
             Current::Block => {
-                let d = Definition::Block {
-                    id,
+                def = Some(Definition::Block {
                     name: Identifier::default(),
-                    start: Point::default(),
-                    end: Point::default(),
-                };
-                self.definitions.push(d);
+                });
+                add_scope = true;
             }
-            Current::NoDefinition => {}
+            Current::NoDefinition => (),
+            _ => {
+                add_scope = true;
+            }
+        }
+        if let Some(def) = def {
+            // let same_def = self.definitions.iter().find(|item| item.)
+            self.definitions.push(def);
+            self.all_ids.insert(id);
+        }
+        if add_scope {
+            self.current_scope.push_front(Scope {
+                id,
+                ..Default::default()
+            });
         }
     }
 
     fn check(&mut self, name: &str, capture: &QueryCapture<'_>, text: &str) -> Option<()> {
         match name {
-            "for_start" => {
+            "for" => {
                 if !self.exist(capture.node.id()) {
                     self.add(capture.node.id(), Current::For);
                 } else {
-                    self.current = Current::NoDefinition;
-                    //
+                    self.current_definition = Current::NoDefinition;
                 }
             }
+
             "for_key" => {
-                if self.current == Current::For {
-                    let def = self.last()?;
+                if self.current_definition == Current::For {
+                    let def = self.definitions.last_mut()?;
                     if let Definition::ForLoop { key, .. } = def {
                         let start = capture.node.start_position();
                         let end = capture.node.end_position();
@@ -214,12 +210,16 @@ impl JinjaDefinitions {
                         key.name = content.to_string();
                         key.start = start;
                         key.end = end;
+                        key.identifier_type = IdentifierType::ForLoopKey;
+                        key.scope_ends.0 =
+                            self.current_scope.front().unwrap_or(&Scope::default()).id;
                     }
                 }
             }
+
             "for_value" => {
-                if self.current == Current::For {
-                    let def = self.last()?;
+                if self.current_definition == Current::For {
+                    let def = self.definitions.last_mut()?;
                     if let Definition::ForLoop { value, .. } = def {
                         let mut identifier = Identifier::default();
                         let start = capture.node.start_position();
@@ -228,94 +228,87 @@ impl JinjaDefinitions {
                         identifier.name = content.to_owned();
                         identifier.start = start;
                         identifier.end = end;
+                        identifier.identifier_type = IdentifierType::ForLoopValue;
+                        identifier.scope_ends.0 =
+                            self.current_scope.front().unwrap_or(&Scope::default()).id;
                         *value = Some(identifier);
                     }
                 }
             }
-            "for_end" => {
-                let hm = self.end.get(&Current::For)?;
-                let all = hm.get(capture.node.id());
-                if all.is_none() {
-                    self.current = Current::For;
-                } else {
-                    self.current = Current::NoDefinition;
-                }
-            }
+
             "set" => {
                 if !self.exist(capture.node.id()) {
                     self.add(capture.node.id(), Current::Set);
                 } else {
-                    self.current = Current::NoDefinition;
+                    self.current_definition = Current::NoDefinition;
                 }
             }
+
             "set_identifier" => {
-                if self.current == Current::Set {
-                    let def = self.last()?;
+                if self.current_definition == Current::Set {
+                    let def = self.definitions.last_mut()?;
                     if let Definition::Set { key, .. } = def {
                         let start = capture.node.start_position();
                         let end = capture.node.end_position();
                         let content = capture.node.utf8_text(text.as_bytes()).ok()?;
+                        if content == key.name {
+                            return None;
+                        }
                         key.name = content.to_string();
                         key.start = start;
                         key.end = end;
+                        let scope = self.current_scope.front().unwrap_or(&Scope::default()).id;
+                        key.scope_ends.0 = scope;
+                        key.identifier_type = IdentifierType::SetVariable;
                     }
                 }
             }
+
             "equals" => {
-                if self.current == Current::Set {
-                    let def = self.last()?;
-                    if let Definition::Set { equals, .. } = def {
+                if self.current_definition == Current::Set {
+                    let def = self.definitions.last_mut()?;
+                    if let Definition::Set { equals, key } = def {
                         *equals = true;
+                        key.scope_ends.0 =
+                            self.current_scope.front().unwrap_or(&Scope::default()).id;
                     }
                 }
             }
-            "endset" => {
-                let hm = self.end.get(&Current::Set)?;
-                let all = hm.get(capture.node.id());
-                if all.is_none() {
-                    self.current = Current::Set;
-                } else {
-                    self.current = Current::NoDefinition;
-                }
-            }
+
             "with" => {
                 if !self.exist(capture.node.id()) {
                     self.add(capture.node.id(), Current::With);
                 } else {
-                    // self.current = Current::NoDefinition;
+                    // self.current_definition = Current::NoDefinition;
                 }
             }
+
             "with_identifier" => {
-                if self.current == Current::With {
-                    let def = self.last()?;
+                if self.current_definition == Current::With {
+                    let def = self.definitions.last_mut()?;
                     if let Definition::With { keys, .. } = def {
                         let start = capture.node.start_position();
                         let end = capture.node.end_position();
                         let content = capture.node.utf8_text(text.as_bytes()).ok()?;
-                        let key = Identifier::new(content, start, end);
+                        let mut key = Identifier::new(content, start, end);
+                        key.identifier_type = IdentifierType::WithVariable;
+                        key.scope_ends.0 =
+                            self.current_scope.front().unwrap_or(&Scope::default()).id;
                         keys.push(key);
                     }
-                }
-            }
-            "endwith" => {
-                let hm = self.end.get(&Current::With)?;
-                let all = hm.get(capture.node.id());
-                if all.is_none() {
-                    self.current = Current::With;
-                } else {
-                    self.current = Current::NoDefinition;
                 }
             }
             "block" => {
                 if !self.exist(capture.node.id()) {
                     self.add(capture.node.id(), Current::Block);
                 } else {
-                    self.current = Current::NoDefinition;
+                    self.current_definition = Current::NoDefinition;
                 }
             }
+
             "block_identifier" => {
-                if self.current == Current::Block {
-                    let def = self.last()?;
+                if self.current_definition == Current::Block {
+                    let def = self.definitions.last_mut()?;
                     if let Definition::Block { name, .. } = def {
                         let start = capture.node.start_position();
                         let end = capture.node.end_position();
@@ -323,184 +316,200 @@ impl JinjaDefinitions {
                         name.name = content.to_string();
                         name.start = start;
                         name.end = end;
+                        name.identifier_type = IdentifierType::TemplateBlock;
+                        name.scope_ends.0 =
+                            self.current_scope.front().unwrap_or(&Scope::default()).id;
                     }
                 }
             }
-            "endblock" => {
-                let hm = self.end.get(&Current::Block)?;
-                let all = hm.get(capture.node.id());
-                if all.is_none() {
-                    self.current = Current::Block;
-                } else {
-                    self.current = Current::NoDefinition;
-                }
-            }
+
             "macro" => {
                 if !self.exist(capture.node.id()) {
                     self.add(capture.node.id(), Current::Macro);
                 } else {
-                    self.current = Current::Macro;
-                    // self.current = Current::NoDefinition;
+                    self.current_definition = Current::Macro;
+                    // self.current_definition = Current::NoDefinition;
                 }
             }
+
             "macro_identifier" => {
-                if self.current == Current::Macro {
-                    let def = self.last()?;
+                if self.current_definition == Current::Macro {
+                    let def = self.definitions.last_mut()?;
                     if let Definition::Macro { keys, .. } = def {
                         let start = capture.node.start_position();
                         let end = capture.node.end_position();
                         let content = capture.node.utf8_text(text.as_bytes()).ok()?;
-                        let key = Identifier::new(content, start, end);
+
+                        let mut key = Identifier::new(content, start, end);
+                        key.scope_ends.0 =
+                            self.current_scope.front().unwrap_or(&Scope::default()).id;
+                        if keys.is_empty() {
+                            key.identifier_type = IdentifierType::MacroName;
+                        } else {
+                            key.identifier_type = IdentifierType::MacroParameter;
+                        }
                         keys.push(key);
                     }
                 }
             }
-            "endmacro" => {
-                let hm = self.end.get(&Current::Macro)?;
-                let all = hm.get(capture.node.id());
-                if all.is_none() {
-                    self.current = Current::Macro;
-                } else {
-                    self.current = Current::NoDefinition;
-                }
-            }
-            "range_start" => {
-                if self.current == Current::For {
-                    range_start!(self, capture, ForLoop);
-                } else if self.current == Current::Set {
-                    range_start!(self, capture, Set);
-                } else if self.current == Current::With {
-                    range_start!(self, capture, With);
-                } else if self.current == Current::Block {
-                    range_start!(self, capture, Block);
-                } else if self.current == Current::Macro {
-                    range_start!(self, capture, Macro);
-                }
-            }
-            "range_end" => {
-                if self.current == Current::For {
-                    range_end!(self, capture, For);
-                } else if self.current == Current::Set {
-                    range_end!(self, capture, Set);
-                } else if self.current == Current::With {
-                    range_end!(self, capture, With);
-                } else if self.current == Current::Block {
-                    range_end!(self, capture, Block);
-                } else if self.current == Current::Macro {
-                    range_end!(self, capture, Macro);
-                }
-            }
-            _ => (),
-        };
 
+            "if" | "elif" | "else" | "filter" | "autoescape" | "raw" => {
+                let current = Current::from_rest(name);
+                self.add(capture.node.id(), current);
+            }
+            "ended" => {
+                self.in_end = true;
+            }
+
+            "range_end" => {
+                if self.in_end {
+                    self.in_end = false;
+                    let mut last = self.current_scope.pop_front()?;
+                    if last.end == Point::default() {
+                        last.end = capture.node.start_position();
+                        self.current_definition = Current::NoDefinition;
+                        self.all_scopes.push(last);
+                    }
+                }
+            }
+
+            "range_start" => {
+                let mut can_add = true;
+                let mut is_set = false;
+                if let Some(last) = self.current_scope.front_mut() {
+                    if let Some(Definition::Set { equals, .. }) = self.definitions.last() {
+                        if self.current_definition == Current::Set && *equals {
+                            can_add = false;
+                        }
+                    }
+                    if can_add {
+                        last.start = capture.node.end_position();
+                    }
+                } else if self.current_definition != Current::NoDefinition {
+                    if let Some(Definition::Set { equals, .. }) = self.definitions.last() {
+                        if self.current_definition == Current::Set && !(*equals) {
+                            can_add = true;
+                        }
+                    }
+
+                    if can_add {
+                        self.current_scope.push_front(Scope {
+                            id: capture.node.id(),
+                            start: capture.node.end_position(),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+
+            // "range_end" => {
+            //     let last = self.definitions.last()?;
+            //     match last {
+            //         Definition::ForLoop { .. } => {
+            //             self.current = Current::For;
+            //         }
+            //         Definition::Set { .. } => {
+            //             self.current = Current::Set;
+            //         }
+            //         Definition::With { .. } => {
+            //             self.current = Current::With;
+            //         }
+            //         Definition::Macro { .. } => {
+            //             self.current = Current::Macro;
+            //         }
+            //         Definition::Block { .. } => {
+            //             self.current = Current::Block;
+            //         }
+            //     }
+            // }
+            _ => {}
+        }
         None
     }
 
-    pub fn fix_end(&mut self) {
-        self.fix_for_loop();
-        self.fix_set();
-        self.fix_with();
-        self.fix_block();
-        self.fix_macro();
-    }
-
-    fn fix_for_loop(&mut self) {
-        let mut for_loops: Vec<_> = self
-            .definitions
-            .iter_mut()
-            .filter(|item| matches!(item, Definition::ForLoop { .. }))
-            .collect();
-        for_loops.reverse();
-        let ended = self.end.get_mut(&Current::For).unwrap();
-        for (index, reversed) in ended.iter().enumerate() {
-            if let Some(Definition::ForLoop { end, .. }) = for_loops.get_mut(index) {
-                *end = reversed.1;
-            }
-        }
-    }
-
-    fn fix_set(&mut self) {
-        let mut set_block: Vec<_> = self
-            .definitions
-            .iter_mut()
-            .filter(|item| matches!(item, Definition::Set { equals: false, .. }))
-            .collect();
-        set_block.reverse();
-        let ended = self.end.get_mut(&Current::Set).unwrap();
-        for (index, reversed) in ended.iter().enumerate() {
-            if let Some(Definition::Set { end, .. }) = set_block.get_mut(index) {
-                *end = reversed.1;
-            }
-        }
-    }
-
-    fn fix_with(&mut self) {
-        let mut with_block: Vec<_> = self
-            .definitions
-            .iter_mut()
-            .filter(|item| matches!(item, Definition::With { .. }))
-            .collect();
-        with_block.reverse();
-        let ended = self.end.get_mut(&Current::With).unwrap();
-        for (index, reversed) in ended.iter().enumerate() {
-            if let Some(Definition::With { end, .. }) = with_block.get_mut(index) {
-                *end = reversed.1;
-            }
-        }
-    }
-
-    fn fix_block(&mut self) {
-        let mut block: Vec<_> = self
-            .definitions
-            .iter_mut()
-            .filter(|item| matches!(item, Definition::Block { .. }))
-            .collect();
-        block.reverse();
-        let ended = self.end.get_mut(&Current::Block).unwrap();
-        for (index, reversed) in ended.iter().enumerate() {
-            if let Some(Definition::Block { end, .. }) = block.get_mut(index) {
-                *end = reversed.1;
-            }
-        }
-    }
-
-    fn fix_macro(&mut self) {
-        let mut macro_block: Vec<_> = self
-            .definitions
-            .iter_mut()
-            .filter(|item| matches!(item, Definition::Macro { .. }))
-            .collect();
-        macro_block.reverse();
-        let ended = self.end.get_mut(&Current::Macro).unwrap();
-        for (index, reversed) in ended.iter().enumerate() {
-            if let Some(Definition::Macro { end, .. }) = macro_block.get_mut(index) {
-                *end = reversed.1;
-            }
-        }
-    }
-
-    pub fn identifiers(&self) -> Vec<&Identifier> {
+    pub fn identifiers(self) -> Vec<Identifier> {
         let mut ids = vec![];
-        for id in &self.definitions {
-            id.key(&mut ids);
+        for id in self.definitions {
+            id.collect(&mut ids);
         }
         ids
+    }
+
+    fn fix_end(&mut self, last_line: Point) {
+        let global_scope = Scope::new(last_line);
+        for def in self.definitions.iter_mut() {
+            match def {
+                Definition::ForLoop { key, value } => {
+                    let scope = self
+                        .all_scopes
+                        .iter()
+                        .find(|item| item.id == key.scope_ends.0);
+                    let scope = scope.unwrap_or(&global_scope);
+                    key.scope_ends.1 = scope.end;
+                    if let Some(value) = value {
+                        value.scope_ends.1 = scope.end;
+                    }
+                }
+                Definition::Set { key, .. } => {
+                    let scope = self
+                        .all_scopes
+                        .iter()
+                        .find(|item| item.id == key.scope_ends.0);
+                    let scope = scope.unwrap_or(&global_scope);
+                    key.scope_ends.1 = scope.end;
+                }
+                Definition::With { keys } => {
+                    for key in keys {
+                        let scope = self
+                            .all_scopes
+                            .iter()
+                            .find(|item| item.id == key.scope_ends.0);
+                        let scope = scope.unwrap_or(&global_scope);
+                        key.scope_ends.1 = scope.end;
+                    }
+                }
+                Definition::Macro { keys, scope } => {
+                    let scope = self.all_scopes.iter().find(|item| item.id == *scope);
+                    let scope = scope.unwrap_or(&global_scope);
+                    for (index, key) in keys.iter_mut().enumerate() {
+                        if index == 0 {
+                            key.scope_ends.1 = scope.end;
+                        } else {
+                            let scope = self
+                                .all_scopes
+                                .iter()
+                                .find(|item| item.id == key.scope_ends.0);
+                            let scope = scope.unwrap_or(&global_scope);
+                            key.scope_ends.1 = scope.end;
+                        }
+                    }
+                }
+                Definition::Block { name } => {
+                    let scope = self
+                        .all_scopes
+                        .iter()
+                        .find(|item| item.id == name.scope_ends.0);
+                    let scope = scope.unwrap_or(&global_scope);
+                    name.scope_ends.1 = scope.end;
+                }
+            }
+            // let id = self.all_scopes.iter().find(|scope| scope.id ==  )
+        }
     }
 }
 
 pub fn definition_query(
     query: &Query,
-    tree: Tree,
+    tree: &Tree,
     trigger_point: Point,
     text: &str,
     all: bool,
 ) -> JinjaDefinitions {
     let closest_node = tree.root_node();
     let mut definitions = JinjaDefinitions::default();
-    definitions.init_end();
     let mut cursor_qry = QueryCursor::new();
     let capture_names = query.capture_names();
-    let matches = cursor_qry.matches(&query, closest_node, text.as_bytes());
+    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
     let captures = matches.into_iter().flat_map(|m| {
         m.captures
             .iter()
@@ -510,6 +519,7 @@ pub fn definition_query(
         let name = &capture_names[capture.index as usize];
         definitions.check(name, capture, text);
     }
-    definitions.fix_end();
+    let root = tree.root_node().end_position();
+    definitions.fix_end(root);
     definitions
 }

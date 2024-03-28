@@ -1,6 +1,6 @@
 use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 
-use super::Identifier;
+use super::{Identifier, IdentifierType};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct RustTemplateCompletion {
@@ -10,6 +10,7 @@ pub struct RustTemplateCompletion {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct RustTemplates {
     pub templates: Vec<Identifier>,
+    in_method: bool,
 }
 
 impl RustTemplates {
@@ -23,23 +24,33 @@ impl RustTemplates {
     }
 
     pub fn check(&mut self, name: &str, capture: &QueryCapture<'_>, text: &str) -> Option<()> {
-        if name == "template_name" {
+        if name == "template_name" && self.in_method {
             let template = capture.node.utf8_text(text.as_bytes()).ok()?;
             let template = template.replace(['\"', '\''], "");
-            let mut start = capture.node.start_position();
-            start.column += 1;
-            let mut end = capture.node.end_position();
-            end.column -= 1;
-            let identifer = Identifier::new(&template, start, end);
+            let start = capture.node.start_position();
+            let end = capture.node.end_position();
+            let mut identifer = Identifier::new(&template, start, end);
+            identifer.identifier_type = IdentifierType::JinjaTemplate;
             self.templates.push(identifer);
+            self.in_method = false;
+        } else if name == "method_name" {
+            let content = capture.node.utf8_text(text.as_bytes()).ok()?;
+            if !METHODS.contains(&content) {
+                return None;
+            }
+            self.in_method = true;
         }
         None
+    }
+
+    pub fn collect(self) -> Vec<Identifier> {
+        self.templates
     }
 }
 
 pub fn rust_templates_query(
     query: &Query,
-    tree: Tree,
+    tree: &Tree,
     trigger_point: Point,
     text: &str,
     all: bool,
@@ -60,3 +71,5 @@ pub fn rust_templates_query(
     }
     templates
 }
+
+static METHODS: [&str; 2] = ["render_jinja", "get_template"];

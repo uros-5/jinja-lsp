@@ -1,10 +1,11 @@
 use std::{collections::HashMap, path::Path};
 
-use jinja_lsp_queries::tree_builder::{JinjaDiagnostic, JinjaVariable, LangType};
+use jinja_lsp_queries::tree_builder::LangType;
 use serde::{Deserialize, Serialize};
+use tower_lsp::lsp_types::Diagnostic;
 use walkdir::WalkDir;
 
-use crate::lsp_files::LspFiles;
+use crate::lsp_files2::LspFiles2;
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
@@ -35,16 +36,13 @@ impl JinjaConfig {
     }
 }
 
-pub type InitLsp = (
-    HashMap<String, Vec<(JinjaVariable, JinjaDiagnostic)>>,
-    LspFiles,
-);
+pub type InitLsp = (HashMap<String, Vec<Diagnostic>>, LspFiles2);
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
     let mut all = vec![config.templates.clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);
-    let mut lsp_files = LspFiles::default();
+    let mut lsp_files = LspFiles2::default();
     let mut diags = HashMap::new();
     for dir in all {
         let walk = WalkDir::new(dir);

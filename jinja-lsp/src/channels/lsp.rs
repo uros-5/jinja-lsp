@@ -31,8 +31,6 @@ pub fn lsp_task(
     lsp_channel: mpsc::Sender<LspMessage>,
     mut lsp_recv: mpsc::Receiver<LspMessage>,
 ) {
-    // let mut documents = HashMap::new();
-    let mut can_complete = false;
     let mut config = JinjaConfig::default();
     let mut lsp_data = LspFiles2::default();
     let filters = init_filter_completions();
@@ -42,8 +40,8 @@ pub fn lsp_task(
             match msg {
                 LspMessage::Initialize(params, sender) => {
                     if let Some(client_info) = params.client_info {
-                        if client_info.name == "helix" {
-                            can_complete = true;
+                        if client_info.name == "Visual Studio Code" {
+                            lsp_data.is_vscode = true;
                         }
                     }
                     params
@@ -55,11 +53,6 @@ pub fn lsp_task(
                             config.user_defined = true;
                             None
                         });
-
-                    if !config.user_defined {
-                        drop(sender);
-                        continue;
-                    }
 
                     let definition_provider = Some(OneOf::Left(true));
                     let references_provider = None;
@@ -130,7 +123,9 @@ pub fn lsp_task(
                                 let _ = diagnostics_channel
                                     .send(DiagnosticMessage::Errors2(errors.0))
                                     .await;
+                                let vscode = lsp_data.is_vscode;
                                 lsp_data = errors.1;
+                                lsp_data.is_vscode = vscode;
                                 lsp_data.config = config.clone();
                                 lsp_data.main_channel = Some(lsp_channel.clone());
                                 let _ = sender.send(true);
@@ -154,7 +149,7 @@ pub fn lsp_task(
                 LspMessage::Completion(params, sender) => {
                     let position = params.text_document_position.position;
                     let uri = params.text_document_position.text_document.uri.clone();
-                    let completion = lsp_data.completion(params, can_complete);
+                    let completion = lsp_data.completion(params);
                     let mut items = None;
 
                     if let Some(completion) = completion {
@@ -198,11 +193,15 @@ pub fn lsp_task(
                                         ..
                                     })) = snippet.text_edit
                                     {
-                                        snippet.text_edit =
-                                            Some(CompletionTextEdit::Edit(TextEdit {
-                                                range,
-                                                new_text,
-                                            }));
+                                        if !lsp_data.is_vscode {
+                                            snippet.text_edit =
+                                                Some(CompletionTextEdit::Edit(TextEdit {
+                                                    range,
+                                                    new_text,
+                                                }));
+                                        } else {
+                                            snippet.text_edit = None;
+                                        }
                                     }
                                     filtered.push(snippet);
                                 }
@@ -285,7 +284,7 @@ pub fn lsp_task(
                     }
                 }
                 LspMessage::DidChangeConfiguration(params) => {
-                    let (sender, rx) = oneshot::channel();
+                    let (sender, _) = oneshot::channel();
                     if let Ok(c) = serde_json::from_value(params.settings) {
                         config = c;
                         config.user_defined = true;
@@ -295,8 +294,6 @@ pub fn lsp_task(
                         continue;
                     }
                     let _ = lsp_channel.send(LspMessage::Initialized(sender)).await;
-
-                    if (rx.await).is_ok() {}
                 }
             }
         }

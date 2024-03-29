@@ -29,8 +29,11 @@ pub enum Definition {
 impl Definition {
     fn collect(self, ids: &mut Vec<Identifier>) {
         match self {
-            Definition::ForLoop { key, .. } => {
+            Definition::ForLoop { key, value, .. } => {
                 ids.push(key);
+                if let Some(value) = value {
+                    ids.push(value);
+                }
             }
             Definition::Set { key, .. } => {
                 ids.push(key);
@@ -378,11 +381,18 @@ impl JinjaDefinitions {
                 let mut is_set = false;
                 if let Some(last) = self.current_scope.front_mut() {
                     if let Some(Definition::Set { equals, .. }) = self.definitions.last() {
+                        is_set = true;
                         if self.current_definition == Current::Set && *equals {
                             can_add = false;
                         }
                     }
-                    if can_add {
+                    if is_set && can_add {
+                        self.current_scope.push_front(Scope {
+                            id: capture.node.id(),
+                            start: capture.node.end_position(),
+                            ..Default::default()
+                        });
+                    } else if can_add {
                         last.start = capture.node.end_position();
                     }
                 } else if self.current_definition != Current::NoDefinition {

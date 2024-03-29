@@ -101,12 +101,9 @@ checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 
 [[package]]
 name = "cc"
-version = "1.0.83"
+version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
-dependencies = [
- "libc",
-]
+checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
 
 [[package]]
 name = "cfg-if"
@@ -290,7 +287,7 @@ checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
 
 [[package]]
 name = "jinja-lsp"
-version = "0.1.61"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -308,8 +305,9 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.61"
+version = "0.1.7"
 dependencies = [
+ "cc",
  "ropey",
  "tower-lsp",
  "tree-sitter",
@@ -526,9 +524,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.2"
+version = "1.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "380b951a9c5e80ddfd6136919eef32310721aa4aacd4889a8d39124b026ab343"
+checksum = "c117dbdfde9c8308975b6a18d71f3f385c89461f7b3fb054288ecf2a2058ba4c"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -538,9 +536,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.3"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f804c7828047e88b2d32e2d7fe5a105da8ee3264f01902f796c8e067dc2483f"
+checksum = "86b83b8b9847f9bf95ef68afb0b8e6cdb80f498442f5179a29fad448fcc1eaea"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -865,9 +863,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-jinja2"
-version = "0.0.5"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c01a7e67bf0ea5ed41c90edc788ecc7c45453f590bba2f9684810b7db0e822f"
+checksum = "06e13eeb9c161d95d0a4326f84aee63006820b1b5bb0206d86fa347cd2f0258b"
 dependencies = [
  "cc",
  "tree-sitter",

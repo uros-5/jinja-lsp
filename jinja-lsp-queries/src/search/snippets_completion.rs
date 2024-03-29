@@ -98,7 +98,7 @@ pub fn snippets() -> Vec<CompletionItem> {
             r#"{% with $1 %}
 {% endwith %}"#,
         ),
-        ("set1", "Set variable", r#"{% set ${1:key} = ${2:"0"} %}"#),
+        ("set1", "Set variable", r#"{% set ${1:key} = ${2:value} %}"#),
         (
             "set2",
             "Set with scope",
@@ -114,7 +114,7 @@ pub fn snippets() -> Vec<CompletionItem> {
         (
             "import",
             "Import entire template as module",
-            r#"    {% import "$1" as ${2:module} %}"#,
+            r#"{% import "$1" as ${2:module} %}"#,
         ),
         ("extends", "Extend parent template", r#"{% extends "$1" %}"#),
         (

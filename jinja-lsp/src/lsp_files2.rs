@@ -48,6 +48,7 @@ pub struct LspFiles2 {
     pub diagnostics_task: JoinHandle<()>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
     pub variables: HashMap<String, Vec<Identifier>>,
+    pub is_vscode: bool,
 }
 
 impl LspFiles2 {
@@ -218,11 +219,7 @@ impl LspFiles2 {
         Some(message)
     }
 
-    pub fn completion(
-        &self,
-        params: CompletionParams,
-        can_complete2: bool,
-    ) -> Option<CompletionType> {
+    pub fn completion(&self, params: CompletionParams) -> Option<CompletionType> {
         let can_complete = {
             matches!(
                 params.context,
@@ -235,13 +232,6 @@ impl LspFiles2 {
                 })
             )
         };
-
-        if !can_complete {
-            let can_complete = can_complete2;
-            if !can_complete {
-                return None;
-            }
-        }
 
         let uri = params.text_document_position.text_document.uri.to_string();
         let row = params.text_document_position.position.line;
@@ -513,7 +503,11 @@ impl LspFiles2 {
         Some(items)
     }
 
-    pub fn read_templates(&self, mut prefix: String, range: Range) -> Option<Vec<CompletionItem>> {
+    pub fn read_templates(
+        &self,
+        mut prefix: String,
+        mut range: Range,
+    ) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
         if prefix.is_empty() {
             prefix = String::from("file:///");
@@ -528,12 +522,18 @@ impl LspFiles2 {
             parts.next();
             let label = parts.next()?.replacen('/', "", 1);
             let new_text = format!("\"{label}\"");
-            let text_edit = CompletionTextEdit::Edit(TextEdit::new(range, new_text));
+            let text_edit = {
+                if self.is_vscode {
+                    None
+                } else {
+                    Some(CompletionTextEdit::Edit(TextEdit::new(range, new_text)))
+                }
+            };
             let item = CompletionItem {
                 label,
                 detail: Some("Jinja template".to_string()),
                 kind: Some(CompletionItemKind::FILE),
-                text_edit: Some(text_edit),
+                text_edit,
                 ..Default::default()
             };
             abc.push(item);
@@ -614,6 +614,7 @@ impl Default for LspFiles2 {
             diagnostics_task,
             main_channel,
             variables: HashMap::default(),
+            is_vscode: false,
         }
     }
 }

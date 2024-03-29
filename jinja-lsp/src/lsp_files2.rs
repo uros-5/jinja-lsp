@@ -3,7 +3,8 @@ use jinja_lsp_queries::{
     search::{
         completion_start, definition::definition_query, objects::objects_query, queries::Queries2,
         rust_identifiers::rust_definition_query, rust_template_completion::rust_templates_query,
-        templates::templates_query, to_range, Identifier, IdentifierType,
+        snippets_completion::snippets_query, templates::templates_query, to_range, Identifier,
+        IdentifierType,
     },
     tree_builder::LangType,
 };
@@ -15,8 +16,8 @@ use std::{
 };
 use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
-    CompletionItemKind, CompletionTextEdit, Diagnostic, DidOpenTextDocumentParams,
-    TextDocumentIdentifier, TextEdit,
+    CompletionItemKind, CompletionTextEdit, Diagnostic, DidOpenTextDocumentParams, DocumentSymbol,
+    DocumentSymbolResponse, SymbolKind, TextDocumentIdentifier, TextEdit,
 };
 
 use jinja_lsp_queries::{
@@ -145,16 +146,14 @@ impl LspFiles2 {
         for change in params.content_changes {
             let range = change.range?;
             let input_edit = rope.to_input_edit(range, &change.text);
-            if change.text.is_empty() {
-                let start = rope.to_byte(range.start);
-                let end = rope.to_byte(range.end);
-                if start <= end {
-                    rope.remove(start..end);
-                } else {
-                    rope.remove(end..start);
-                }
+            let start = rope.to_byte(range.start);
+            let end = rope.to_byte(range.end);
+            if start <= end {
+                rope.remove(start..end);
             } else {
-                let start = rope.to_byte(range.start);
+                rope.remove(end..start);
+            }
+            if !change.text.is_empty() {
                 rope.insert(start, &change.text);
             }
             let mut w = FileContent::default();
@@ -256,6 +255,14 @@ impl LspFiles2 {
         let _ = doc.write_to(&mut writter);
         match ext {
             LangType::Template => {
+                let query = &self.queries2.jinja_snippets;
+                let snippets = snippets_query(query, tree, point, &writter.content, false);
+                if let Some(name) = snippets.at_keyword(point) {
+                    return Some(CompletionType::Snippets {
+                        name,
+                        range: snippets.last_range(),
+                    });
+                }
                 let query = &self.queries2.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
                 if let Some(completion) = objects.completion(point) {
@@ -326,6 +333,8 @@ impl LspFiles2 {
             let object = objects.get_last_id()?;
             if object.is_filter {
                 return Some((Identifier::from(object), true));
+            } else {
+                return Some((Identifier::from(object), false));
             }
         }
         // else if objects.is_ident(point) {
@@ -547,6 +556,45 @@ impl LspFiles2 {
         hm.insert(name.to_owned(), diagnostics);
         let msg = DiagnosticMessage::Errors2(hm);
         Some(msg)
+    }
+
+    pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {
+        let mut data_type = IdentifierType::UndefinedVariable;
+        let this_file = self.variables.get(&uri.as_str().to_string())?;
+        let this_file = this_file
+            .iter()
+            .filter(|variable| variable.identifier_type != IdentifierType::TemplateBlock)
+            .filter(|variable| {
+                let bigger = hover.start >= variable.end;
+                let in_scope = hover.start <= variable.scope_ends.1;
+                let same_name = hover.name == variable.name;
+                bigger && in_scope && same_name
+            })
+            .max()?;
+        Some(this_file.identifier_type.clone())
+    }
+
+    pub fn document_symbols(
+        &self,
+        params: tower_lsp::lsp_types::DocumentSymbolParams,
+    ) -> Option<DocumentSymbolResponse> {
+        let mut symbols = vec![];
+        let variables = self.variables.get(params.text_document.uri.as_str())?;
+        for variable in variables {
+            #[allow(deprecated)]
+            let symbol = DocumentSymbol {
+                name: variable.name.to_owned(),
+                detail: None,
+                kind: variable.identifier_type.symbol_kind(),
+                range: to_range((variable.start, variable.end)),
+                selection_range: to_range((variable.start, variable.end)),
+                children: None,
+                deprecated: None,
+                tags: None,
+            };
+            symbols.push(symbol);
+        }
+        Some(DocumentSymbolResponse::Nested(symbols))
     }
 }
 

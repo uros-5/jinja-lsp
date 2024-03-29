@@ -6,8 +6,9 @@ use tokio::sync::{
 use tower_lsp::{
     jsonrpc::Result,
     lsp_types::{
-        CompletionParams, CompletionResponse, DidCloseTextDocumentParams,
-        DidOpenTextDocumentParams, InitializeParams, InitializeResult,
+        CompletionParams, CompletionResponse, DidChangeConfigurationParams,
+        DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
+        DocumentSymbolResponse, InitializeParams, InitializeResult,
     },
     Client, LanguageServer,
 };
@@ -48,13 +49,7 @@ impl LanguageServer for Backend {
             .main_channel
             .send(LspMessage::Initialized(sender))
             .await;
-        if let Ok(msg) = rx.await {
-            if !msg {
-                let _ = self.shutdown().await;
-            }
-        } else {
-            let _ = self.shutdown().await;
-        }
+        if (rx.await).is_ok() {}
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
@@ -129,6 +124,29 @@ impl LanguageServer for Backend {
             .send(LspMessage::ExecuteCommand(params, sender))
             .await;
         Ok(None)
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let (sender, tx) = oneshot::channel();
+        let _ = self
+            .main_channel
+            .send(LspMessage::DocumentSymbol(params, sender))
+            .await;
+        if let Ok(symbols) = tx.await {
+            return Ok(symbols);
+        }
+
+        Ok(None)
+    }
+
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let _ = self
+            .main_channel
+            .send(LspMessage::DidChangeConfiguration(params))
+            .await;
     }
 
     async fn shutdown(&self) -> Result<()> {

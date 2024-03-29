@@ -1,16 +1,16 @@
-use tower_lsp::lsp_types::{CompletionItemKind, Position, Range};
+use tower_lsp::lsp_types::{CompletionItemKind, Position, Range, SymbolKind};
 use tree_sitter::Point;
 
 use self::objects::JinjaObject;
 
 pub mod definition;
-pub mod jinja_completion;
 pub mod jinja_state;
 pub mod objects;
 pub mod queries;
 pub mod rust_identifiers;
 pub mod rust_state;
 pub mod rust_template_completion;
+pub mod snippets_completion;
 pub mod templates;
 pub mod test_queries;
 
@@ -43,7 +43,10 @@ impl From<&JinjaObject> for Identifier {
 
 pub fn completion_start(trigger_point: Point, identifier: &Identifier) -> Option<&str> {
     let len = identifier.name.len();
-    let diff = identifier.end.column - trigger_point.column;
+    let diff = identifier.end.column - 1 - trigger_point.column;
+    if diff == 0 {
+        return Some("");
+    }
     if diff > len {
         return None;
     }
@@ -103,6 +106,22 @@ impl IdentifierType {
             IdentifierType::BackendVariable => CompletionItemKind::VARIABLE,
             IdentifierType::UndefinedVariable => CompletionItemKind::CONSTANT,
             IdentifierType::JinjaTemplate => CompletionItemKind::FILE,
+        }
+    }
+
+    pub fn symbol_kind(&self) -> SymbolKind {
+        match self {
+            IdentifierType::ForLoopKey => SymbolKind::VARIABLE,
+            IdentifierType::ForLoopValue => SymbolKind::VARIABLE,
+            IdentifierType::ForLoopCount => SymbolKind::FIELD,
+            IdentifierType::SetVariable => SymbolKind::VARIABLE,
+            IdentifierType::WithVariable => SymbolKind::VARIABLE,
+            IdentifierType::MacroName => SymbolKind::FUNCTION,
+            IdentifierType::MacroParameter => SymbolKind::FIELD,
+            IdentifierType::TemplateBlock => SymbolKind::MODULE,
+            IdentifierType::BackendVariable => SymbolKind::VARIABLE,
+            IdentifierType::UndefinedVariable => SymbolKind::CONSTANT,
+            IdentifierType::JinjaTemplate => SymbolKind::FILE,
         }
     }
 }

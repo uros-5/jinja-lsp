@@ -7,6 +7,7 @@ pub struct Queries2 {
     pub jinja_imports: Query,
     pub rust_definitions: Query,
     pub rust_templates: Query,
+    pub jinja_snippets: Query,
 }
 
 impl Clone for Queries2 {
@@ -23,6 +24,7 @@ impl Default for Queries2 {
             rust_definitions: Query::new(tree_sitter_rust::language(), RUST_DEFINITIONS).unwrap(),
             jinja_imports: Query::new(tree_sitter_jinja2::language(), JINJA_IMPORTS).unwrap(),
             rust_templates: Query::new(tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
+            jinja_snippets: Query::new(tree_sitter_jinja2::language(), JINJA_SNIPPETS).unwrap(),
         }
     }
 }
@@ -283,7 +285,7 @@ const RUST_TEMPLATES: &str = r#"
 )
 "#;
 
-const _JINJA_SNIPPETS: &str = r#"
+const JINJA_SNIPPETS: &str = r#"
 [
 	(statement) @block
     (ERROR

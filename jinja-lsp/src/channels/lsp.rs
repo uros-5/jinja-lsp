@@ -1,16 +1,17 @@
-use jinja_lsp_queries::search::objects::CompletionType;
+use jinja_lsp_queries::search::{objects::CompletionType, snippets_completion::snippets};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 use tower_lsp::{
     lsp_types::{
         CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CompletionItem,
         CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
-        DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-        Documentation, ExecuteCommandOptions, ExecuteCommandParams, GotoDefinitionParams,
-        GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability,
-        InitializeParams, InitializeResult, MarkupContent, MarkupKind, MessageType, OneOf,
-        ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
-        TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
+        CompletionTextEdit, DidChangeConfigurationParams, DidChangeTextDocumentParams,
+        DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
+        DocumentSymbolResponse, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
+        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+        HoverProviderCapability, InitializeParams, InitializeResult, MarkupContent, MarkupKind,
+        MessageType, OneOf, ServerCapabilities, ServerInfo, TextDocumentSyncCapability,
+        TextDocumentSyncKind, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit,
     },
     Client,
 };
@@ -35,6 +36,7 @@ pub fn lsp_task(
     let mut config = JinjaConfig::default();
     let mut lsp_data = LspFiles2::default();
     let filters = init_filter_completions();
+    let snippets = snippets();
     tokio::spawn(async move {
         while let Some(msg) = lsp_recv.recv().await {
             match msg {
@@ -67,6 +69,7 @@ pub fn lsp_task(
                         commands: vec!["reset_variables".to_string(), "warn".to_string()],
                         ..Default::default()
                     });
+                    let document_symbol_provider = Some(OneOf::Left(true));
 
                     let msg = InitializeResult {
                         capabilities: ServerCapabilities {
@@ -93,12 +96,13 @@ pub fn lsp_task(
                             references_provider,
                             code_action_provider,
                             execute_command_provider,
+                            document_symbol_provider,
                             hover_provider,
                             ..ServerCapabilities::default()
                         },
                         server_info: Some(ServerInfo {
                             name: String::from("jinja-lsp"),
-                            version: Some(String::from("0.1.61")),
+                            version: Some(String::from("0.1.62")),
                         }),
                         offset_encoding: None,
                     };
@@ -108,21 +112,18 @@ pub fn lsp_task(
                     client.log_message(MessageType::INFO, "Initialized").await;
                     if !config.user_defined {
                         client
-                            .log_message(MessageType::INFO, "Config doesn't exist.")
+                            .log_message(MessageType::WARNING, "Config doesn't exist.")
                             .await;
-                        break;
                     }
                     if config.templates.is_empty() {
                         client
-                            .log_message(MessageType::INFO, "Template directory not found")
+                            .log_message(MessageType::WARNING, "Template directory not found")
                             .await;
-                        break;
                     }
                     if config.lang != "rust" {
                         client
-                            .log_message(MessageType::INFO, "Backend language not supported")
+                            .log_message(MessageType::WARNING, "Backend language not supported")
                             .await;
-                        break;
                     } else {
                         match walkdir(&config) {
                             Ok(errors) => {
@@ -138,7 +139,6 @@ pub fn lsp_task(
                                 let msg = err.to_string();
                                 client.log_message(MessageType::INFO, msg).await;
                                 let _ = sender.send(false);
-                                break;
                             }
                         }
                     }
@@ -187,20 +187,62 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(templates));
                                 }
                             }
+                            CompletionType::Snippets { name, range } => {
+                                let mut filtered = vec![];
+                                for snippet in
+                                    snippets.iter().filter(|item| item.label.starts_with(&name))
+                                {
+                                    let mut snippet = snippet.clone();
+                                    if let Some(CompletionTextEdit::Edit(TextEdit {
+                                        new_text,
+                                        ..
+                                    })) = snippet.text_edit
+                                    {
+                                        snippet.text_edit =
+                                            Some(CompletionTextEdit::Edit(TextEdit {
+                                                range,
+                                                new_text,
+                                            }));
+                                    }
+                                    filtered.push(snippet);
+                                }
+
+                                if !filtered.is_empty() {
+                                    items = Some(CompletionResponse::Array(filtered));
+                                }
+                            }
                         };
                     }
                     let _ = sender.send(items);
                 }
                 LspMessage::Hover(params, sender) => {
+                    let uri = params
+                        .text_document_position_params
+                        .text_document
+                        .uri
+                        .clone();
                     let mut res = None;
                     if let Some(hover) = lsp_data.hover(params) {
-                        let filter = filters
-                            .iter()
-                            .find(|name| name.name == hover.0.name && hover.1);
-                        if let Some(filter) = filter {
+                        if hover.1 {
+                            let filter = filters
+                                .iter()
+                                .find(|name| name.name == hover.0.name && hover.1);
+                            if let Some(filter) = filter {
+                                let markup_content = MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: filter.desc.to_string(),
+                                };
+                                let hover_contents = HoverContents::Markup(markup_content);
+                                let hover = Hover {
+                                    contents: hover_contents,
+                                    range: None,
+                                };
+                                res = Some(hover);
+                            }
+                        } else if let Some(data_type) = lsp_data.data_type(uri, hover.0) {
                             let markup_content = MarkupContent {
                                 kind: MarkupKind::Markdown,
-                                value: filter.desc.to_string(),
+                                value: data_type.completion_detail().to_owned(),
                             };
                             let hover_contents = HoverContents::Markup(markup_content);
                             let hover = Hover {
@@ -237,6 +279,25 @@ pub fn lsp_task(
                         let _ = diagnostics_channel.send(errors).await;
                     }
                 }
+                LspMessage::DocumentSymbol(params, sender) => {
+                    if let Some(symbols) = lsp_data.document_symbols(params) {
+                        let _ = sender.send(Some(symbols));
+                    }
+                }
+                LspMessage::DidChangeConfiguration(params) => {
+                    let (sender, rx) = oneshot::channel();
+                    if let Ok(c) = serde_json::from_value(params.settings) {
+                        config = c;
+                        config.user_defined = true;
+                    }
+
+                    if !config.user_defined {
+                        continue;
+                    }
+                    let _ = lsp_channel.send(LspMessage::Initialized(sender)).await;
+
+                    if (rx.await).is_ok() {}
+                }
             }
         }
     });
@@ -262,4 +323,9 @@ pub enum LspMessage {
         oneshot::Sender<Option<CodeActionResponse>>,
     ),
     ExecuteCommand(ExecuteCommandParams, oneshot::Sender<Option<Value>>),
+    DocumentSymbol(
+        DocumentSymbolParams,
+        oneshot::Sender<Option<DocumentSymbolResponse>>,
+    ),
+    DidChangeConfiguration(DidChangeConfigurationParams),
 }

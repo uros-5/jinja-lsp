@@ -193,8 +193,11 @@ impl JinjaDefinitions {
         }
     }
 
-    fn check(&mut self, name: &str, capture: &QueryCapture<'_>, text: &str) -> Option<()> {
+    fn check(&mut self, name: &str, capture: &QueryCapture<'_>, text: &str) -> Option<bool> {
         match name {
+            "error" => {
+                return None;
+            }
             "for" => {
                 if !self.exist(capture.node.id()) {
                     self.add(capture.node.id(), Current::For);
@@ -434,7 +437,7 @@ impl JinjaDefinitions {
             // }
             _ => {}
         }
-        None
+        Some(true)
     }
 
     pub fn identifiers(self) -> Vec<Identifier> {
@@ -527,7 +530,10 @@ pub fn definition_query(
     });
     for capture in captures {
         let name = &capture_names[capture.index as usize];
-        definitions.check(name, capture, text);
+        let err = definitions.check(name, capture, text);
+        if err.is_none() {
+            break;
+        }
     }
     let root = tree.root_node().end_position();
     definitions.fix_end(root);

@@ -44,12 +44,11 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _params: InitializedParams) {
-        let (sender, rx) = oneshot::channel();
+        let (sender, _) = oneshot::channel();
         let _ = self
             .main_channel
             .send(LspMessage::Initialized(sender))
             .await;
-        if (rx.await).is_ok() {}
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {

@@ -121,7 +121,7 @@ pub fn lsp_task(
                         match walkdir(&config) {
                             Ok(errors) => {
                                 let _ = diagnostics_channel
-                                    .send(DiagnosticMessage::Errors2(errors.0))
+                                    .send(DiagnosticMessage::Errors(errors.0))
                                     .await;
                                 let vscode = lsp_data.is_vscode;
                                 lsp_data = errors.1;

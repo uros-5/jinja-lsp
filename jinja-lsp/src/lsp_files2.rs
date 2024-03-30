@@ -215,7 +215,7 @@ impl LspFiles2 {
         } else {
             hm.insert(uri.to_owned(), vec![]);
         }
-        let message = DiagnosticMessage::Errors2(hm);
+        let message = DiagnosticMessage::Errors(hm);
         Some(message)
     }
 
@@ -558,7 +558,7 @@ impl LspFiles2 {
         let diagnostics = self.read_tree(name)?;
         let mut hm = HashMap::new();
         hm.insert(name.to_owned(), diagnostics);
-        let msg = DiagnosticMessage::Errors2(hm);
+        let msg = DiagnosticMessage::Errors(hm);
         Some(msg)
     }
 

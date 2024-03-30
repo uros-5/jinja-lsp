@@ -30,8 +30,6 @@ impl Default for Queries2 {
 }
 
 const DEFINITIONS: &str = r#"
-
-
 (
   [
     (statement
@@ -155,6 +153,7 @@ const DEFINITIONS: &str = r#"
         (#eq? @rawkeyword "raw")
         (statement_end) @range_start
     ) @raw
+    (ERROR) @error
   ]
 )
 [
@@ -164,6 +163,7 @@ const DEFINITIONS: &str = r#"
       (#match? @endkeyword "^end")
       (statement_end)
     ) @ended
+
 ]
 
 "#;

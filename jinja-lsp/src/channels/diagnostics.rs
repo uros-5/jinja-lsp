@@ -11,7 +11,7 @@ pub fn diagnostics_task(client: Client, mut receiver: Receiver<DiagnosticMessage
         while let Some(msg) = receiver.recv().await {
             match msg {
                 DiagnosticMessage::Str(msg) => client.log_message(MessageType::INFO, msg).await,
-                DiagnosticMessage::Errors2(all_errors) => {
+                DiagnosticMessage::Errors(all_errors) => {
                     for (uri, errors) in all_errors.into_iter() {
                         let uri = Url::parse(&uri).unwrap();
                         client.publish_diagnostics(uri, errors, None).await;
@@ -23,6 +23,6 @@ pub fn diagnostics_task(client: Client, mut receiver: Receiver<DiagnosticMessage
 }
 
 pub enum DiagnosticMessage {
-    Errors2(HashMap<String, Vec<Diagnostic>>),
+    Errors(HashMap<String, Vec<Diagnostic>>),
     Str(String),
 }

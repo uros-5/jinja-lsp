@@ -233,6 +233,10 @@ impl LspFiles2 {
             )
         };
 
+        if !can_complete {
+            return None;
+        }
+
         let uri = params.text_document_position.text_document.uri.to_string();
         let row = params.text_document_position.position.line;
         let column = params.text_document_position.position.character;

@@ -4,14 +4,17 @@ use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 use tree_sitter::{Point, Tree};
 
 use crate::{
-    search::{objects::objects_query, queries::Queries2, Identifier, IdentifierType},
+    search::{
+        objects::objects_query, queries::Queries, templates::templates_query, Identifier,
+        IdentifierType,
+    },
     tree_builder::{JinjaDiagnostic, LangType},
 };
 
-pub fn search_errors2(
+pub fn search_errors(
     root: &Tree,
     source: &str,
-    query: &Queries2,
+    queries: &Queries,
     variables: &HashMap<String, Vec<Identifier>>,
     file_name: &String,
     templates: &String,
@@ -21,7 +24,7 @@ pub fn search_errors2(
     match lang_type {
         LangType::Template => {
             let trigger_point = Point::new(0, 0);
-            let query = &query.jinja_objects;
+            let query = &queries.jinja_objects;
             let objects = objects_query(query, root, trigger_point, source, true);
             let objects = objects.show();
             let this_file = variables.get(file_name)?;
@@ -75,7 +78,13 @@ pub fn search_errors2(
                     diagnostics.push(diagnostic);
                 }
             }
-            let id_templates = this_file
+
+            let mut variables = vec![];
+            let query_templates = &queries.jinja_imports;
+            let jinja_imports = templates_query(query_templates, root, trigger_point, source, true);
+            jinja_imports.collect(&mut variables);
+
+            let id_templates = variables
                 .iter()
                 .filter(|identifier| identifier.identifier_type == IdentifierType::JinjaTemplate);
             for i in id_templates {

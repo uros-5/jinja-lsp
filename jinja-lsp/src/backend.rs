@@ -174,7 +174,7 @@ pub fn code_actions() -> Vec<CodeActionOrCommand> {
 }
 impl Backend {
     pub fn new(client: Client) -> Self {
-        let (lsp_sender, lsp_recv) = mpsc::channel(20);
+        let (lsp_sender, lsp_recv) = mpsc::channel(50);
         let (diagnostic_sender, diagnostic_recv) = mpsc::channel(20);
         lsp_task(
             client.clone(),

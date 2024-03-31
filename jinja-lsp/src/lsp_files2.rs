@@ -1,7 +1,7 @@
 use jinja_lsp_queries::{
-    lsp_helper::search_errors2,
+    lsp_helper::search_errors,
     search::{
-        completion_start, definition::definition_query, objects::objects_query, queries::Queries2,
+        completion_start, definition::definition_query, objects::objects_query, queries::Queries,
         rust_identifiers::rust_definition_query, rust_template_completion::rust_templates_query,
         snippets_completion::snippets_query, templates::templates_query, to_range, Identifier,
         IdentifierType,
@@ -17,7 +17,7 @@ use std::{
 use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
     CompletionItemKind, CompletionTextEdit, Diagnostic, DidOpenTextDocumentParams, DocumentSymbol,
-    DocumentSymbolResponse, SymbolKind, TextDocumentIdentifier, TextEdit,
+    DocumentSymbolResponse, TextDocumentIdentifier, TextEdit,
 };
 
 use jinja_lsp_queries::{
@@ -39,11 +39,11 @@ use crate::{
     config::JinjaConfig,
 };
 
-pub struct LspFiles2 {
+pub struct LspFiles {
     trees: HashMap<LangType, HashMap<String, Tree>>,
     documents: HashMap<String, Rope>,
     pub parsers: Parsers,
-    pub queries2: Queries2,
+    pub queries2: Queries,
     pub config: JinjaConfig,
     pub diagnostics_task: JoinHandle<()>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
@@ -51,7 +51,7 @@ pub struct LspFiles2 {
     pub is_vscode: bool,
 }
 
-impl LspFiles2 {
+impl LspFiles {
     pub fn read_file(&mut self, path: &&Path, lang_type: LangType) -> Option<()> {
         if let Ok(name) = std::fs::canonicalize(path) {
             let name = name.to_str()?;
@@ -87,6 +87,12 @@ impl LspFiles2 {
             }
             LangType::Template => {
                 let mut variables = vec![];
+                let query_snippets = &self.queries2.jinja_snippets;
+                let snippets =
+                    snippets_query(query_snippets, tree, trigger_point, file_content, true);
+                if snippets.is_error {
+                    return None;
+                }
                 let query_defs = &self.queries2.jinja_definitions;
                 let mut definitions =
                     definition_query(query_defs, tree, trigger_point, file_content, true)
@@ -187,7 +193,7 @@ impl LspFiles2 {
         let lang_type = self.config.file_ext(&Path::new(name))?;
         let trees = self.trees.get(&lang_type)?;
         let tree = trees.get(name)?;
-        search_errors2(
+        search_errors(
             tree,
             &content,
             &self.queries2,
@@ -251,11 +257,12 @@ impl LspFiles2 {
             LangType::Template => {
                 let query = &self.queries2.jinja_snippets;
                 let snippets = snippets_query(query, tree, point, &writter.content, false);
-                if let Some(name) = snippets.at_keyword(point) {
-                    return Some(CompletionType::Snippets {
-                        name,
-                        range: snippets.last_range(),
-                    });
+                if snippets.to_complete(point).is_some() {
+                    let start = to_position2(point);
+                    let mut end = to_position2(point);
+                    end.character += 1;
+                    let range = Range::new(start, end);
+                    return Some(CompletionType::Snippets { range });
                 }
                 let query = &self.queries2.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
@@ -475,7 +482,10 @@ impl LspFiles2 {
         let this_file = self.variables.get(uri)?;
         let this_file = this_file
             .iter()
-            .filter(|variable| variable.identifier_type != IdentifierType::TemplateBlock)
+            .filter(|variable| {
+                variable.identifier_type != IdentifierType::TemplateBlock
+                    && variable.identifier_type != IdentifierType::JinjaTemplate
+            })
             .filter(|variable| {
                 let bigger = position >= variable.end;
                 let in_scope = position <= variable.scope_ends.1;
@@ -507,11 +517,7 @@ impl LspFiles2 {
         Some(items)
     }
 
-    pub fn read_templates(
-        &self,
-        mut prefix: String,
-        mut range: Range,
-    ) -> Option<Vec<CompletionItem>> {
+    pub fn read_templates(&self, mut prefix: String, range: Range) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
         if prefix.is_empty() {
             prefix = String::from("file:///");
@@ -563,7 +569,6 @@ impl LspFiles2 {
     }
 
     pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {
-        let mut data_type = IdentifierType::UndefinedVariable;
         let this_file = self.variables.get(&uri.as_str().to_string())?;
         let this_file = this_file
             .iter()
@@ -602,7 +607,7 @@ impl LspFiles2 {
     }
 }
 
-impl Default for LspFiles2 {
+impl Default for LspFiles {
     fn default() -> Self {
         let mut trees = HashMap::new();
         trees.insert(LangType::Template, HashMap::new());
@@ -612,7 +617,7 @@ impl Default for LspFiles2 {
         Self {
             trees,
             parsers: Parsers::default(),
-            queries2: Queries2::default(),
+            queries2: Queries::default(),
             documents: HashMap::new(),
             config: JinjaConfig::default(),
             diagnostics_task,

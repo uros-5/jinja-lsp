@@ -9,9 +9,10 @@ use tower_lsp::{
         DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
         DocumentSymbolResponse, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, InitializeResult, MarkupContent, MarkupKind,
-        MessageType, OneOf, ServerCapabilities, ServerInfo, TextDocumentSyncCapability,
-        TextDocumentSyncKind, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit,
+        HoverProviderCapability, InitializeParams, InitializeResult, InsertReplaceEdit,
+        MarkupContent, MarkupKind, MessageType, OneOf, ServerCapabilities, ServerInfo,
+        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+        TextDocumentSyncSaveOptions, TextEdit,
     },
     Client,
 };
@@ -20,7 +21,7 @@ use crate::{
     backend::code_actions,
     config::{walkdir, JinjaConfig},
     filter::init_filter_completions,
-    lsp_files2::LspFiles2,
+    lsp_files2::LspFiles,
 };
 
 use super::diagnostics::DiagnosticMessage;
@@ -32,7 +33,7 @@ pub fn lsp_task(
     mut lsp_recv: mpsc::Receiver<LspMessage>,
 ) {
     let mut config = JinjaConfig::default();
-    let mut lsp_data = LspFiles2::default();
+    let mut lsp_data = LspFiles::default();
     let filters = init_filter_completions();
     let snippets = snippets();
     tokio::spawn(async move {
@@ -80,6 +81,7 @@ pub fn lsp_task(
                                     "-".to_string(),
                                     "\"".to_string(),
                                     " ".to_string(),
+                                    "%".to_string(),
                                 ]),
                                 all_commit_characters: None,
                                 work_done_progress_options: Default::default(),
@@ -182,11 +184,9 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(templates));
                                 }
                             }
-                            CompletionType::Snippets { name, range } => {
+                            CompletionType::Snippets { range } => {
                                 let mut filtered = vec![];
-                                for snippet in
-                                    snippets.iter().filter(|item| item.label.starts_with(&name))
-                                {
+                                for snippet in snippets.iter() {
                                     let mut snippet = snippet.clone();
                                     if let Some(CompletionTextEdit::Edit(TextEdit {
                                         new_text,
@@ -195,10 +195,13 @@ pub fn lsp_task(
                                     {
                                         if !lsp_data.is_vscode {
                                             snippet.text_edit =
-                                                Some(CompletionTextEdit::Edit(TextEdit {
-                                                    range,
-                                                    new_text,
-                                                }));
+                                                Some(CompletionTextEdit::InsertAndReplace(
+                                                    InsertReplaceEdit {
+                                                        new_text,
+                                                        insert: range,
+                                                        replace: range,
+                                                    },
+                                                ));
                                         } else {
                                             snippet.text_edit = None;
                                         }

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types::Diagnostic;
 use walkdir::WalkDir;
 
-use crate::lsp_files2::LspFiles2;
+use crate::lsp_files2::LspFiles;
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
@@ -36,13 +36,13 @@ impl JinjaConfig {
     }
 }
 
-pub type InitLsp = (HashMap<String, Vec<Diagnostic>>, LspFiles2);
+pub type InitLsp = (HashMap<String, Vec<Diagnostic>>, LspFiles);
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
     let mut all = vec![config.templates.clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);
-    let mut lsp_files = LspFiles2::default();
+    let mut lsp_files = LspFiles::default();
     let mut diags = HashMap::new();
     for dir in all {
         let walk = WalkDir::new(dir);
@@ -59,6 +59,7 @@ pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
         }
     }
 
+    lsp_files.config = config.clone();
     lsp_files.read_trees(&mut diags);
     Ok((diags, lsp_files))
 }

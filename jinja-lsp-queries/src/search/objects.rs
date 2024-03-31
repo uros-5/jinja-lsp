@@ -38,6 +38,9 @@ impl JinjaObjects {
         let start = capture.node.start_position();
         let end = capture.node.end_position();
         match name {
+            "error" => {
+                return None;
+            }
             "just_id" => {
                 self.build_object(capture, source);
             }
@@ -55,7 +58,7 @@ impl JinjaObjects {
             }
             _ => (),
         }
-        None
+        Some(())
     }
 
     pub fn build_object(&mut self, capture: &QueryCapture<'_>, source: &str) {
@@ -79,7 +82,7 @@ impl JinjaObjects {
                             return;
                         }
                         self.ident = (start, end);
-                        let is_filter = self.is_hover(start) && self.is_filter(start);
+                        let is_filter = self.is_hover(start) && self.is_filter();
                         self.objects.push(JinjaObject::new(
                             String::from(value),
                             start,
@@ -95,7 +98,7 @@ impl JinjaObjects {
                     return;
                 }
                 self.ident = (start, end);
-                let is_filter = self.is_hover(start) && self.is_filter(start);
+                let is_filter = self.is_hover(start) && self.is_filter();
                 self.objects
                     .push(JinjaObject::new(String::from(value), start, end, is_filter));
             }
@@ -128,11 +131,10 @@ impl JinjaObjects {
     }
 
     pub fn is_hover(&self, trigger_point: Point) -> bool {
-        let in_id = trigger_point >= self.ident.0 && trigger_point <= self.ident.1;
-        in_id
+        trigger_point >= self.ident.0 && trigger_point <= self.ident.1
     }
 
-    pub fn is_filter(&self, trigger_point: Point) -> bool {
+    pub fn is_filter(&self) -> bool {
         self.pipe.1 == self.ident.0
     }
 
@@ -164,7 +166,10 @@ pub fn objects_query(
     });
     for capture in captures {
         let name = &capture_names[capture.index as usize];
-        objects.check(name, capture, text);
+        let checked = objects.check(name, capture, text);
+        if checked.is_none() {
+            break;
+        }
     }
     objects
 }
@@ -174,7 +179,7 @@ pub enum CompletionType {
     Filter,
     Identifier,
     IncludedTemplate { name: String, range: Range },
-    Snippets { name: String, range: Range },
+    Snippets { range: Range },
 }
 
 static VALID_IDENTIFIERS: [&str; 6] = ["loop", "true", "false", "not", "as", "module"];

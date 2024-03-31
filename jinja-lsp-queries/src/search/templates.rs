@@ -91,6 +91,9 @@ impl JinjaImports {
     }
     pub fn check(&mut self, name: &str, capture: &QueryCapture<'_>, text: &str) -> Option<()> {
         match name {
+            "error" => {
+                return None;
+            }
             "extends" => {
                 let id = capture.node.id();
                 let last = self.imports.get_mut(&id);
@@ -211,7 +214,7 @@ impl JinjaImports {
 
             _ => (),
         }
-        None
+        Some(())
     }
 
     pub fn collect(self, ids: &mut Vec<Identifier>) {
@@ -239,7 +242,10 @@ pub fn templates_query(
     });
     for capture in captures {
         let name = &capture_names[capture.index as usize];
-        imports.check(name, capture, text);
+        let res = imports.check(name, capture, text);
+        if res.is_none() {
+            break;
+        }
     }
     imports
 }

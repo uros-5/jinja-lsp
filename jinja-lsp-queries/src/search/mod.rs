@@ -43,8 +43,8 @@ impl From<&JinjaObject> for Identifier {
 
 pub fn completion_start(trigger_point: Point, identifier: &Identifier) -> Option<&str> {
     let len = identifier.name.len();
-    let diff = identifier.end.column - 1 - trigger_point.column;
-    if diff == 0 {
+    let diff = identifier.end.column - trigger_point.column;
+    if diff == 0 || diff == 1 {
         return Some("");
     }
     if diff > len {

@@ -1,7 +1,7 @@
 use tree_sitter::Query;
 
 #[derive(Debug)]
-pub struct Queries2 {
+pub struct Queries {
     pub jinja_definitions: Query,
     pub jinja_objects: Query,
     pub jinja_imports: Query,
@@ -10,13 +10,13 @@ pub struct Queries2 {
     pub jinja_snippets: Query,
 }
 
-impl Clone for Queries2 {
+impl Clone for Queries {
     fn clone(&self) -> Self {
         Self::default()
     }
 }
 
-impl Default for Queries2 {
+impl Default for Queries {
     fn default() -> Self {
         Self {
             jinja_definitions: Query::new(tree_sitter_jinja2::language(), DEFINITIONS).unwrap(),
@@ -187,6 +187,8 @@ const OBJECTS: &str = r#"
 
         (expression) @expr
 
+        (ERROR) @error
+
     ]
 ) 
 "#;
@@ -265,6 +267,8 @@ const JINJA_IMPORTS: &str = r#"
       (#eq? @as_keyword "as")
       (statement_end)
     ) @import
+
+    (ERROR) @error
   ]
 )
 "#;
@@ -287,18 +291,14 @@ const RUST_TEMPLATES: &str = r#"
 
 const JINJA_SNIPPETS: &str = r#"
 [
-	(statement) @block
+	(statement_begin) @start
+	(statement_end) @end
     (ERROR
-    	(ERROR)
-    ) @error1
+        (ERROR) @error
+    ) @error_block 
 	
     (
-      (keyword) @missing
-      (#eq? @missing "")
-    )
-    
-    (
-    	(keyword) @longer_keyword
+        (keyword) @keyword
     )
 ]
 "#;

@@ -72,7 +72,7 @@ pub enum Current {
 }
 
 impl Current {
-    fn from_end(name: &str) -> Self {
+    fn _from_end(name: &str) -> Self {
         match name {
             "endfor" => Self::For,
             "endset" => Self::Set,
@@ -384,7 +384,7 @@ impl JinjaDefinitions {
                 let mut is_set = false;
                 if let Some(last) = self.current_scope.front_mut() {
                     if let Some(Definition::Set { equals, .. }) = self.definitions.last() {
-                        is_set = true;
+                        is_set = !equals;
                         if self.current_definition == Current::Set && *equals {
                             can_add = false;
                         }

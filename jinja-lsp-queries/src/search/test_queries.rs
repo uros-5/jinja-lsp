@@ -6,7 +6,7 @@ mod query_tests {
     use crate::{
         search::objects::CompletionType,
         search::{
-            completion_start, definition::definition_query, queries::Queries2,
+            completion_start, definition::definition_query, queries::Queries,
             rust_identifiers::rust_definition_query,
             rust_template_completion::rust_templates_query, templates::templates_query,
         },
@@ -73,7 +73,7 @@ mod query_tests {
                 4,
             ),
         ];
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = query.jinja_definitions;
 
         for case in cases {
@@ -87,7 +87,7 @@ mod query_tests {
 
     #[test]
     fn jinja_identifiers() {
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = query.jinja_objects;
         let cases = [
             (
@@ -148,7 +148,7 @@ mod query_tests {
 
         let tree = prepare_rust_tree(case);
         let trigger_point = Point::new(0, 0);
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = &query.rust_definitions;
         let rust = rust_definition_query(query, &tree, trigger_point, case, true);
         assert_eq!(rust.show().len(), 8);
@@ -181,7 +181,7 @@ mod query_tests {
         for case in cases {
             let tree = prepare_jinja_tree(source);
             let trigger_point = case.0;
-            let query = Queries2::default();
+            let query = Queries::default();
             let query = &query.jinja_objects;
             let objects = objects_query(query, &tree, trigger_point, source, false);
             assert_eq!(objects.completion(trigger_point), case.1);
@@ -211,7 +211,7 @@ mod query_tests {
         for case in cases {
             let tree = prepare_jinja_tree(source);
             let trigger_point = case.0;
-            let query = Queries2::default();
+            let query = Queries::default();
             let query = &query.jinja_imports;
             let templates = templates_query(query, &tree, trigger_point, source, false);
             let template = templates.in_template(trigger_point);
@@ -239,7 +239,7 @@ mod query_tests {
         "#;
         let tree = prepare_rust_tree(source);
         let trigger_point = Point::default();
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = &query.rust_templates;
         let templates = rust_templates_query(query, &tree, trigger_point, source, true);
         assert_eq!(templates.templates.len(), 3);
@@ -255,7 +255,7 @@ mod query_tests {
         "#;
         let tree = prepare_rust_tree(source);
         let trigger_point = Point::new(3, 47);
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = &query.rust_templates;
         let templates = rust_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
@@ -278,7 +278,7 @@ mod query_tests {
         {% set b = 11 %}
     {% endmacro %}
         "#;
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = query.jinja_definitions;
         let tree = prepare_jinja_tree(source);
         let trigger_point = Point::new(0, 0);
@@ -296,22 +296,16 @@ mod query_tests {
                 "{% if} {% if a == 123 %} {{ a }} {% endif %}",
                 Point::new(0, 5),
                 true,
-                Some("if".to_owned()),
             ),
-            (
-                "{% with} {{ var }} {% with %}",
-                Point::new(0, 26),
-                true,
-                Some("with".to_owned()),
-            ),
-            ("{% with  ", Point::new(0, 9), false, None),
+            ("{% with} {{ var }} {% with %}", Point::new(0, 26), true),
+            ("{% with  ", Point::new(0, 9), false),
         ];
-        let query = Queries2::default();
+        let query = Queries::default();
         let query = query.jinja_snippets;
         for case in cases {
             let tree = prepare_jinja_tree(case.0);
             let snippets = snippets_query(&query, &tree, case.1, case.0, false);
-            assert_eq!(snippets.at_keyword(case.1), case.3);
+            assert_eq!(snippets.is_error, case.2);
         }
     }
 }

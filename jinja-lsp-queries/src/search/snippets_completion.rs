@@ -126,7 +126,7 @@ pub fn snippets() -> Vec<CompletionItem> {
         ),
         (
             "set1",
-            "Set variable",
+            "Set variable that is current scope",
             r#" set ${1:key} = ${2:value} %}
             "#,
         ),

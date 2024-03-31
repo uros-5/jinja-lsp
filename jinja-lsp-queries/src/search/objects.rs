@@ -67,16 +67,13 @@ impl JinjaObjects {
         let end = capture.node.end_position();
         if let Ok(value) = value {
             if start.row == self.dot.1.row && start.column == self.dot.1.column {
-                match self
-                    .objects
-                    .last_mut()
-                    .map(|last| {
-                        last.fields.push((String::from(value), (start, end)));
-                        self.ident = (start, end);
-                    })
-                    .is_none()
-                {
-                    true => {
+                let last_object = self.objects.last_mut().map(|last| {
+                    last.fields.push((String::from(value), (start, end)));
+                    self.ident = (start, end);
+                });
+                match last_object {
+                    Some(_) => {}
+                    None => {
                         // TODO: in future add those to main library
                         if VALID_IDENTIFIERS.contains(&value) {
                             return;
@@ -90,7 +87,6 @@ impl JinjaObjects {
                             is_filter,
                         ));
                     }
-                    false => (),
                 }
             } else {
                 // TODO: in future add those to main library

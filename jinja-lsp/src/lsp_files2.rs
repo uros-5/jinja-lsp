@@ -43,7 +43,7 @@ pub struct LspFiles {
     trees: HashMap<LangType, HashMap<String, Tree>>,
     documents: HashMap<String, Rope>,
     pub parsers: Parsers,
-    pub queries2: Queries,
+    pub queries: Queries,
     pub config: JinjaConfig,
     pub diagnostics_task: JoinHandle<()>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
@@ -73,8 +73,8 @@ impl LspFiles {
         match lang_type {
             LangType::Backend => {
                 let mut variables = vec![];
-                let query_defs = &self.queries2.rust_definitions;
-                let query_templates = &self.queries2.rust_templates;
+                let query_defs = &self.queries.rust_definitions;
+                let query_templates = &self.queries.rust_templates;
                 let mut ids =
                     rust_definition_query(query_defs, tree, trigger_point, file_content, true)
                         .show();
@@ -87,13 +87,13 @@ impl LspFiles {
             }
             LangType::Template => {
                 let mut variables = vec![];
-                let query_snippets = &self.queries2.jinja_snippets;
+                let query_snippets = &self.queries.jinja_snippets;
                 let snippets =
                     snippets_query(query_snippets, tree, trigger_point, file_content, true);
                 if snippets.is_error {
                     return None;
                 }
-                let query_defs = &self.queries2.jinja_definitions;
+                let query_defs = &self.queries.jinja_definitions;
                 let mut definitions =
                     definition_query(query_defs, tree, trigger_point, file_content, true)
                         .identifiers();
@@ -196,7 +196,7 @@ impl LspFiles {
         search_errors(
             tree,
             &content,
-            &self.queries2,
+            &self.queries,
             &self.variables,
             &name.to_string(),
             &self.config.templates,
@@ -255,7 +255,7 @@ impl LspFiles {
         let _ = doc.write_to(&mut writter);
         match ext {
             LangType::Template => {
-                let query = &self.queries2.jinja_snippets;
+                let query = &self.queries.jinja_snippets;
                 let snippets = snippets_query(query, tree, point, &writter.content, false);
                 if snippets.to_complete(point).is_some() {
                     let start = to_position2(point);
@@ -264,12 +264,12 @@ impl LspFiles {
                     let range = Range::new(start, end);
                     return Some(CompletionType::Snippets { range });
                 }
-                let query = &self.queries2.jinja_objects;
+                let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
                 if let Some(completion) = objects.completion(point) {
                     return Some(completion);
                 }
-                let query = &self.queries2.jinja_imports;
+                let query = &self.queries.jinja_imports;
                 let query = templates_query(query, tree, point, &writter.content, false);
                 let identifier = query.in_template(point)?.get_identifier(point)?;
                 let start = completion_start(point, identifier)?;
@@ -281,7 +281,7 @@ impl LspFiles {
             }
             LangType::Backend => {
                 let rust_templates = rust_templates_query(
-                    &self.queries2.rust_templates,
+                    &self.queries.rust_templates,
                     tree,
                     point,
                     &writter.content,
@@ -325,7 +325,7 @@ impl LspFiles {
         let trigger_point = Point::new(row as usize, column as usize);
         let trees = self.trees.get(&LangType::Template)?;
         let tree = trees.get(&uri)?;
-        let query = &self.queries2.jinja_objects;
+        let query = &self.queries.jinja_objects;
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
@@ -369,7 +369,7 @@ impl LspFiles {
 
         match lang_type {
             LangType::Template => {
-                let query = &self.queries2.jinja_objects;
+                let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
                 let mut res = objects.is_ident(point).and_then(|ident| {
                     current_ident = ident.to_owned();
@@ -388,7 +388,7 @@ impl LspFiles {
                     }))
                 });
                 res.is_none().then(|| -> Option<()> {
-                    let query = &self.queries2.jinja_imports;
+                    let query = &self.queries.jinja_imports;
                     let query = templates_query(query, tree, point, &writter.content, false);
                     let identifier = query.in_template(point)?.get_identifier(point)?;
                     let dir = &self.config.templates;
@@ -426,7 +426,7 @@ impl LspFiles {
             }
 
             LangType::Backend => {
-                let query = &self.queries2.rust_templates;
+                let query = &self.queries.rust_templates;
                 let templates = rust_templates_query(query, tree, point, &writter.content, false);
                 let template = templates.in_template(point)?;
                 let dir = &self.config.templates;
@@ -455,7 +455,7 @@ impl LspFiles {
         let point = Point::new(row as usize, column as usize);
         let trees = self.trees.get(&LangType::Template)?;
         let tree = trees.get(&uri)?;
-        let query = &self.queries2.jinja_objects;
+        let query = &self.queries.jinja_objects;
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
@@ -617,7 +617,7 @@ impl Default for LspFiles {
         Self {
             trees,
             parsers: Parsers::default(),
-            queries2: Queries::default(),
+            queries: Queries::default(),
             documents: HashMap::new(),
             config: JinjaConfig::default(),
             diagnostics_task,

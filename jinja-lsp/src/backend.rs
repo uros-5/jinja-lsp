@@ -6,8 +6,9 @@ use tokio::sync::{
 use tower_lsp::{
     jsonrpc::Result,
     lsp_types::{
-        CompletionParams, CompletionResponse, DidCloseTextDocumentParams,
-        DidOpenTextDocumentParams, InitializeParams, InitializeResult,
+        CompletionParams, CompletionResponse, DidChangeConfigurationParams,
+        DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
+        DocumentSymbolResponse, InitializeParams, InitializeResult,
     },
     Client, LanguageServer,
 };
@@ -43,18 +44,11 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _params: InitializedParams) {
-        let (sender, rx) = oneshot::channel();
+        let (sender, _) = oneshot::channel();
         let _ = self
             .main_channel
             .send(LspMessage::Initialized(sender))
             .await;
-        if let Ok(msg) = rx.await {
-            if !msg {
-                let _ = self.shutdown().await;
-            }
-        } else {
-            let _ = self.shutdown().await;
-        }
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
@@ -131,6 +125,29 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let (sender, tx) = oneshot::channel();
+        let _ = self
+            .main_channel
+            .send(LspMessage::DocumentSymbol(params, sender))
+            .await;
+        if let Ok(symbols) = tx.await {
+            return Ok(symbols);
+        }
+
+        Ok(None)
+    }
+
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let _ = self
+            .main_channel
+            .send(LspMessage::DidChangeConfiguration(params))
+            .await;
+    }
+
     async fn shutdown(&self) -> Result<()> {
         Ok(())
     }
@@ -157,7 +174,7 @@ pub fn code_actions() -> Vec<CodeActionOrCommand> {
 }
 impl Backend {
     pub fn new(client: Client) -> Self {
-        let (lsp_sender, lsp_recv) = mpsc::channel(20);
+        let (lsp_sender, lsp_recv) = mpsc::channel(50);
         let (diagnostic_sender, diagnostic_recv) = mpsc::channel(20);
         lsp_task(
             client.clone(),

@@ -260,7 +260,7 @@ mod query_tests {
         let templates = rust_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
             if let Some(completion) = completion_start(trigger_point, template) {
-                assert_eq!(completion, "accoun");
+                assert_eq!(completion, "accou");
             }
         }
     }

@@ -29,145 +29,6 @@ impl Default for Queries {
     }
 }
 
-const DEFINITIONS: &str = r#"
-(
-  [
-    (statement
-      (statement_begin)
-      (keyword) @for_keyword
-      [
-        (
-          (operator)? @open_par
-          (identifier)? @for_key
-          .
-          (operator)? @comma
-          .
-          (identifier)? @for_value
-          .
-          (operator)? @close_par
-          (_).
-        ) @for2
-
-        (
-          (identifier) @for_key
-        ) @for1
-      ]
-
-
-      (#eq? @open_par "\(")
-      (#match-eq? @comma ",")
-      (#eq? @close_par "\)")
-      (#not-match? @for_key "(^\\d+$)")
-      (#not-match? @for_value "(^\\d+$)")
-  
-      (keyword) @in
-      (#eq @in "in")
-      (#eq? @for_keyword "for")
-      (identifier) @for_items
-      (_)? @other
-      (statement_end) @range_start
-    ) @for        
-
-    (
-      (statement
-        (statement_begin)
-        (keyword) @set_keyword
-        (identifier) @set_identifier
-        (operator)? @equals
-        (_)? @others
-        (statement_end) @range_start
-
-        (#eq? @set_keyword "set")
-        (#not-match? @set_identifier "(^\\d+$)")
-        (#eq? @equals "= ")
-      )
-    ) @set
-    
-    (statement
-      (statement_begin)
-      (keyword) @with_keyword
-      (identifier) @with_identifier
-      (#eq? @with_keyword "with")
-      (#not-match? @with_identifier "(^\\d+$)")
-      (statement_end) @range_start
-    ) @with
-
-    (statement
-      (statement_begin)
-      (keyword) @macro_keyword
-      (identifier) @macro_identifier
-      (#eq? @macro_keyword "macro")
-      (#not-match? @macro_identifier "(^\\d+$)")
-      (statement_end) @range_start
-    ) @macro
-
-    (statement
-      (statement_begin)
-      (keyword) @block_keyword
-      (identifier) @block_identifier
-      (#eq? @block_keyword "block")
-      (#not-match? @block_identifier "(^\\d+$)")
-      (statement_end) @range_start
-    ) @block
-    
-    
-    (statement
-    	(statement_begin)
-        (keyword) @ifkeyword
-        (#eq? @ifkeyword "if")
-        (statement_end) @range_start
-    ) @if
-    
-    (statement
-    	(statement_begin)
-        (keyword) @elifkeyword
-        (#eq? @elifkeyword "elif")
-        (statement_end) @range_start
-    ) @elif
-
-    (statement
-    	(statement_begin)
-        (keyword) @elsekeyword
-        (#eq? @elsekeyword "else")
-        (statement_end) @range_start
-    ) @else
-    
-    
-    (statement
-        (statement_begin)
-        (keyword) @filterkeyword
-        (#eq? @filterkeyword "filter")
-        (statement_end) @range_start
-    ) @filter
-    
-    (statement
-        (statement_begin)
-        (keyword) @autokeyword
-        (#eq? @autokeyword "autoescape")
-        (statement_end) @range_start
-    ) @autoescape
-    
-    (statement
-        (statement_begin)
-        (keyword) @rawkeyword
-        (#eq? @rawkeyword "raw")
-        (statement_end) @range_start
-    ) @raw
-    (ERROR) @error
-  ]
-)
-[
-	(statement
-      (statement_begin) @range_end
-      (keyword) @endkeyword
-      (#match? @endkeyword "^end")
-      (statement_end)
-    ) @ended
-
-]
-
-"#;
-
 const OBJECTS: &str = r#"
    (
     [
@@ -301,4 +162,38 @@ const JINJA_SNIPPETS: &str = r#"
         (keyword) @keyword
     )
 ]
+"#;
+
+const DEFINITIONS: &str = r#"
+(statement
+  (statement_begin) @scope_end
+
+  (statement_end) @scope_start
+)
+
+(
+  (identifier) @id
+  (#not-match? @id "^(\\d+)$")
+)
+    (
+    	(keyword) @definition
+        (#match? @definition "^(for|set|with|macro|block)$")
+    )
+    
+    (
+    	(keyword) @scope
+        (#match? @scope "^(if|elif|else|filter|autoescape|raw)$")
+    )
+
+    (
+        (keyword) @endblock
+        (#match? @endblock "^end")
+    )
+
+(
+	(operator) @equals
+    (#match? @equals "=")
+)
+
+(ERROR) @error
 "#;

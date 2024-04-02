@@ -2,14 +2,22 @@
   "name": "jinja-lsp",
   "description": "jinja-lsp",
   "license": "MIT",
-  "version": "0.1.61",
+  "version": "0.1.73",
   "repository": {
     "url": "https://github.com/uros-5/jinja-lsp"
   },
-  "publisher": "uros-5",
-  "categories": [],
+  "icon": "media/icon.png",
+  "publisher": "urosmrkobrada",
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Other"
+  ],
   "keywords": [
-    "multi-root ready"
+    "multi-root ready",
+    "jinja",
+    "minijinja",
+    "rust"
   ],
   "engines": {
     "vscode": "^1.75.0"
@@ -27,14 +35,14 @@
         "jinja-lsp.templates": {
           "type": "string",
           "default": "./templates",
-          "description": "Traces the communication between VS Code and the language server."
+          "description": "Templates directory"
         },
         "jinja-lsp.backend": {
           "type": "array",
           "default": [
             "./src"
           ],
-          "description": "Traces the communication between VS Code and the language server."
+          "description": "Backend directories"
         },
         "jinja-lsp.lang": {
           "type": "string",
@@ -42,7 +50,7 @@
             "rust"
           ],
           "default": "rust",
-          "description": "Traces the communication between VS Code and the language server."
+          "description": "Language that is used on backend"
         }
       }
     }

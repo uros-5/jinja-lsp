@@ -2,7 +2,7 @@
   "name": "jinja-lsp",
   "description": "jinja-lsp",
   "license": "MIT",
-  "version": "0.1.73",
+  "version": "0.1.80",
   "repository": {
     "url": "https://github.com/uros-5/jinja-lsp"
   },
@@ -17,14 +17,17 @@
     "multi-root ready",
     "jinja",
     "minijinja",
-    "rust"
+    "rust",
+    "jinja-lsp",
+    "python"
   ],
   "engines": {
     "vscode": "^1.75.0"
   },
   "activationEvents": [
     "onLanguage:jinja-html",
-    "onLanguage:rust"
+    "onLanguage:rust",
+    "onLanguage:python"
   ],
   "main": "./client/out/extension",
   "contributes": {
@@ -47,7 +50,8 @@
         "jinja-lsp.lang": {
           "type": "string",
           "enum": [
-            "rust"
+            "rust",
+            "python"
           ],
           "default": "rust",
           "description": "Language that is used on backend"

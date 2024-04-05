@@ -178,4 +178,6 @@ pub enum CompletionType {
     Snippets { range: Range },
 }
 
-static VALID_IDENTIFIERS: [&str; 6] = ["loop", "true", "false", "not", "as", "module"];
+static VALID_IDENTIFIERS: [&str; 8] = [
+    "loop", "true", "false", "not", "as", "module", "super", "url_for",
+];

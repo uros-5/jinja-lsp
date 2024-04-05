@@ -4,11 +4,9 @@ use tree_sitter::Point;
 use self::objects::JinjaObject;
 
 pub mod definition;
-pub mod jinja_state;
 pub mod objects;
 pub mod queries;
 pub mod rust_identifiers;
-pub mod rust_state;
 pub mod rust_template_completion;
 pub mod snippets_completion;
 pub mod templates;

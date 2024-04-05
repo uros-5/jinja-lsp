@@ -2,11 +2,11 @@ use jinja_lsp_queries::{
     lsp_helper::search_errors,
     search::{
         completion_start, definition::definition_query, objects::objects_query, queries::Queries,
-        rust_identifiers::rust_definition_query, rust_template_completion::rust_templates_query,
-        snippets_completion::snippets_query, templates::templates_query, to_range, Identifier,
-        IdentifierType,
+        rust_identifiers::backend_definition_query,
+        rust_template_completion::backend_templates_query, snippets_completion::snippets_query,
+        templates::templates_query, to_range, Identifier, IdentifierType,
     },
-    tree_builder::LangType,
+    tree_builder::{JinjaDiagnostic, LangType},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
-    CompletionItemKind, CompletionTextEdit, Diagnostic, DidOpenTextDocumentParams, DocumentSymbol,
+    CompletionItemKind, CompletionTextEdit, DidOpenTextDocumentParams, DocumentSymbol,
     DocumentSymbolResponse, TextDocumentIdentifier, TextEdit,
 };
 
@@ -48,6 +48,7 @@ pub struct LspFiles {
     pub diagnostics_task: JoinHandle<()>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
     pub variables: HashMap<String, Vec<Identifier>>,
+    pub code_actions: HashMap<String, Vec<Identifier>>,
     pub is_vscode: bool,
 }
 
@@ -73,17 +74,23 @@ impl LspFiles {
         match lang_type {
             LangType::Backend => {
                 let mut variables = vec![];
-                let query_defs = &self.queries.rust_definitions;
-                let query_templates = &self.queries.rust_templates;
+                let query_defs = &self.queries.backend_definitions;
+                let query_templates = &self.queries.backend_templates;
                 let mut ids =
-                    rust_definition_query(query_defs, tree, trigger_point, file_content, true)
+                    backend_definition_query(query_defs, tree, trigger_point, file_content, true)
                         .show();
-                let mut templates =
-                    rust_templates_query(query_templates, tree, trigger_point, file_content, true)
-                        .collect();
+                let mut templates = backend_templates_query(
+                    query_templates,
+                    tree,
+                    trigger_point,
+                    file_content,
+                    true,
+                )
+                .collect();
                 variables.append(&mut ids);
                 variables.append(&mut templates);
                 self.variables.insert(String::from(name), variables);
+                self.code_actions.insert(String::from(name), vec![]);
             }
             LangType::Template => {
                 let mut variables = vec![];
@@ -99,6 +106,7 @@ impl LspFiles {
                         .identifiers();
                 variables.append(&mut definitions);
                 self.variables.insert(String::from(name), variables);
+                self.code_actions.insert(String::from(name), vec![]);
             }
         }
         Some(())
@@ -185,7 +193,7 @@ impl LspFiles {
         None
     }
 
-    pub fn read_tree(&self, name: &str) -> Option<Vec<Diagnostic>> {
+    pub fn read_tree(&self, name: &str) -> Option<Vec<(JinjaDiagnostic, Identifier)>> {
         let rope = self.documents.get(name)?;
         let mut writter = FileContent::default();
         let _ = rope.write_to(&mut writter);
@@ -280,8 +288,8 @@ impl LspFiles {
                 })
             }
             LangType::Backend => {
-                let rust_templates = rust_templates_query(
-                    &self.queries.rust_templates,
+                let rust_templates = backend_templates_query(
+                    &self.queries.backend_templates,
                     tree,
                     point,
                     &writter.content,
@@ -299,6 +307,7 @@ impl LspFiles {
     }
 
     fn delete_variables(&mut self, uri: &str) -> Option<()> {
+        self.variables.get_mut(uri)?.clear();
         self.variables.get_mut(uri)?.clear();
         Some(())
     }
@@ -396,9 +405,7 @@ impl LspFiles {
                     let buffer = std::fs::canonicalize(path).ok()?;
                     let url = format!("file://{}", buffer.to_str()?);
                     let url = Url::parse(&url).ok()?;
-                    let start = to_position2(identifier.start);
-                    let end = to_position2(identifier.end);
-                    let range = Range::new(start, end);
+                    let range = Range::new(Position::default(), Position::default());
                     let location = Location::new(url, range);
                     res = Some(GotoDefinitionResponse::Scalar(location));
                     None
@@ -426,17 +433,16 @@ impl LspFiles {
             }
 
             LangType::Backend => {
-                let query = &self.queries.rust_templates;
-                let templates = rust_templates_query(query, tree, point, &writter.content, false);
+                let query = &self.queries.backend_templates;
+                let templates =
+                    backend_templates_query(query, tree, point, &writter.content, false);
                 let template = templates.in_template(point)?;
                 let dir = &self.config.templates;
                 let path = format!("{dir}/{}", template.name);
                 let buffer = std::fs::canonicalize(path).ok()?;
                 let url = format!("file://{}", buffer.to_str()?);
                 let url = Url::parse(&url).ok()?;
-                let start = to_position2(template.start);
-                let end = to_position2(template.end);
-                let range = Range::new(start, end);
+                let range = Range::new(Position::default(), Position::default());
                 let location = Location::new(url, range);
                 Some(GotoDefinitionResponse::Scalar(location))
             }
@@ -463,7 +469,56 @@ impl LspFiles {
         Some(objects.in_expr(point))
     }
 
-    pub fn read_trees(&self, diags: &mut HashMap<String, Vec<Diagnostic>>) {
+    pub fn code_action2(&self, action_params: CodeActionParams) -> Option<JinjaCodeAction> {
+        let uri = action_params.text_document.uri.to_string();
+        let lang_type = self.config.file_ext(&Path::new(&uri))?;
+        let row = action_params.range.start.line;
+        let column = action_params.range.start.character;
+        let point = Point::new(row as usize, column as usize);
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(&uri)?;
+        let code_actions = self.code_actions.get(&uri)?;
+        match lang_type {
+            LangType::Template => {
+                let query = &self.queries.jinja_objects;
+                let doc = self.documents.get(&uri)?;
+                let mut writter = FileWriter::default();
+                let _ = doc.write_to(&mut writter);
+                let code_action = code_actions
+                    .iter()
+                    .find(|item| point >= item.start && point <= item.end);
+                if let Some(code_action) = code_action {
+                    return Some(JinjaCodeAction::CreateTemplate(code_action.name.to_owned()));
+                }
+                let objects = objects_query(query, tree, point, &writter.content, false);
+                if objects.in_expr(point) {
+                    return Some(JinjaCodeAction::Reset);
+                }
+                None
+            }
+            LangType::Backend => {
+                let code_action = code_actions
+                    .iter()
+                    .find(|item| point >= item.start && point <= item.end);
+                if let Some(code_action) = code_action {
+                    return Some(JinjaCodeAction::CreateTemplate(code_action.name.to_owned()));
+                }
+                None
+            }
+        }
+    }
+
+    pub fn add_code_actions(&mut self, code_actions: HashMap<String, Vec<Identifier>>) {
+        for code_action in code_actions {
+            if let Some(item) = self.code_actions.get_mut(&code_action.0) {
+                *item = code_action.1;
+            } else {
+                self.code_actions.insert(code_action.0, code_action.1);
+            }
+        }
+    }
+
+    pub fn read_trees(&self, diags: &mut HashMap<String, Vec<(JinjaDiagnostic, Identifier)>>) {
         for tree in self.trees.get(&LangType::Template).unwrap() {
             let errors = self.read_tree(tree.0);
             if let Some(errors) = errors {
@@ -624,6 +679,7 @@ impl Default for LspFiles {
             main_channel,
             variables: HashMap::default(),
             is_vscode: false,
+            code_actions: HashMap::default(),
         }
     }
 }
@@ -662,4 +718,9 @@ impl std::io::Write for FileWriter {
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
+}
+
+pub enum JinjaCodeAction {
+    Reset,
+    CreateTemplate(String),
 }

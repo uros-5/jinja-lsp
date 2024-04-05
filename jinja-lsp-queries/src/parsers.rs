@@ -19,6 +19,13 @@ impl Parsers {
             LangType::Backend => self.backend.parse(text, old_tree),
         }
     }
+
+    pub fn update_backend(&mut self, lang: &str) {
+        if lang == "python" {
+            self.backend = Parser::new();
+            let _ = self.backend.set_language(tree_sitter_python::language());
+        }
+    }
 }
 
 impl Default for Parsers {

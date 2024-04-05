@@ -67,7 +67,7 @@ impl Import {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub enum Current {
     Id(usize),
     #[default]

@@ -7,8 +7,8 @@ mod query_tests {
         search::objects::CompletionType,
         search::{
             completion_start, definition::definition_query, queries::Queries,
-            rust_identifiers::rust_definition_query,
-            rust_template_completion::rust_templates_query, templates::templates_query,
+            rust_identifiers::backend_definition_query,
+            rust_template_completion::backend_templates_query, templates::templates_query,
         },
     };
 
@@ -25,6 +25,17 @@ mod query_tests {
 
     fn prepare_rust_tree(text: &str) -> tree_sitter::Tree {
         let language = tree_sitter_rust::language();
+        let mut parser = Parser::new();
+
+        parser
+            .set_language(language)
+            .expect("could not load rust grammar");
+
+        parser.parse(text, None).expect("not to fail")
+    }
+
+    fn prepare_python_tree(text: &str) -> tree_sitter::Tree {
+        let language = tree_sitter_python::language();
         let mut parser = Parser::new();
 
         parser
@@ -136,7 +147,7 @@ mod query_tests {
     }
 
     #[test]
-    fn rust_macros() {
+    fn rust_definition() {
         let case = r#"
             let a = context!(name => 11 + abc, abc => "username");
             let b = context!{name, username => "username" } 
@@ -149,9 +160,27 @@ mod query_tests {
         let tree = prepare_rust_tree(case);
         let trigger_point = Point::new(0, 0);
         let query = Queries::default();
-        let query = &query.rust_definitions;
-        let rust = rust_definition_query(query, &tree, trigger_point, case, true);
+        let query = &query.backend_definitions;
+        let rust = backend_definition_query(query, &tree, trigger_point, case, true);
         assert_eq!(rust.show().len(), 8);
+    }
+
+    #[test]
+    fn python_definition() {
+        let case = r#"
+            jinja_env.globals['a'] = 1
+            render_template(data=123)
+            some_obj.render_template(first_name = "John", last_name = "Doe")
+            render(a=11)        
+        "#;
+
+        let tree = prepare_python_tree(case);
+        let trigger_point = Point::new(0, 0);
+        let mut query = Queries::default();
+        query.update_backend("python");
+        let query = &query.backend_definitions;
+        let rust = backend_definition_query(query, &tree, trigger_point, case, true);
+        assert_eq!(rust.show().len(), 5);
     }
 
     #[test]
@@ -240,8 +269,8 @@ mod query_tests {
         let tree = prepare_rust_tree(source);
         let trigger_point = Point::default();
         let query = Queries::default();
-        let query = &query.rust_templates;
-        let templates = rust_templates_query(query, &tree, trigger_point, source, true);
+        let query = &query.backend_templates;
+        let templates = backend_templates_query(query, &tree, trigger_point, source, true);
         assert_eq!(templates.templates.len(), 3);
     }
 
@@ -256,8 +285,29 @@ mod query_tests {
         let tree = prepare_rust_tree(source);
         let trigger_point = Point::new(3, 47);
         let query = Queries::default();
-        let query = &query.rust_templates;
-        let templates = rust_templates_query(query, &tree, trigger_point, source, false);
+        let query = &query.backend_templates;
+        let templates = backend_templates_query(query, &tree, trigger_point, source, false);
+        if let Some(template) = templates.in_template(trigger_point) {
+            if let Some(completion) = completion_start(trigger_point, template) {
+                assert_eq!(completion, "accou");
+            }
+        }
+    }
+
+    #[test]
+    fn template_completion_in_python() {
+        let source = r#"
+                tmp2 = jinja.get_template("account3");
+                tmp2 = jinja.get_template("account2");
+                tmp = jinja.get_template("account");
+                tmp = jinja.anything("account");
+            "#;
+        let tree = prepare_python_tree(source);
+        let trigger_point = Point::new(3, 47);
+        let mut query = Queries::default();
+        query.update_backend("python");
+        let query = &query.backend_templates;
+        let templates = backend_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
             if let Some(completion) = completion_start(trigger_point, template) {
                 assert_eq!(completion, "accou");

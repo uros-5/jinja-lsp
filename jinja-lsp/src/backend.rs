@@ -6,9 +6,10 @@ use tokio::sync::{
 use tower_lsp::{
     jsonrpc::Result,
     lsp_types::{
-        CompletionParams, CompletionResponse, DidChangeConfigurationParams,
-        DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
-        DocumentSymbolResponse, InitializeParams, InitializeResult,
+        CompletionParams, CompletionResponse, CreateFile, CreateFileOptions,
+        DidChangeConfigurationParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+        DocumentChangeOperation, DocumentChanges, DocumentSymbolParams, DocumentSymbolResponse,
+        InitializeParams, InitializeResult, ResourceOp, Url, WorkspaceEdit,
     },
     Client, LanguageServer,
 };
@@ -153,22 +154,49 @@ impl LanguageServer for Backend {
     }
 }
 
-pub fn code_actions() -> Vec<CodeActionOrCommand> {
+pub fn code_actions(template: Option<(String, String)>) -> Vec<CodeActionOrCommand> {
     let mut commands = vec![];
-    for command in [
-        ("Reset variables", "reset_variables"),
-        ("Warn about unused", "warn"),
-    ] {
-        commands.push(CodeActionOrCommand::CodeAction(CodeAction {
-            title: command.0.to_string(),
-            kind: Some(CodeActionKind::EMPTY),
-            command: Some(Command::new(
-                command.1.to_string(),
-                command.1.to_string(),
-                None,
-            )),
-            ..Default::default()
-        }));
+    if let Some((templates, template)) = template {
+        if let Ok(path) = std::fs::canonicalize(templates) {
+            let name = format!("file://{}/{template}", path.to_str().unwrap());
+            let cf = CreateFile {
+                uri: Url::parse(&name).unwrap(),
+                options: Some(CreateFileOptions {
+                    overwrite: Some(false),
+                    ignore_if_exists: Some(true),
+                }),
+                annotation_id: None,
+            };
+
+            commands.push(CodeActionOrCommand::CodeAction(CodeAction {
+                title: "Generate new template".to_string(),
+                kind: Some(CodeActionKind::QUICKFIX),
+                edit: Some(WorkspaceEdit {
+                    changes: None,
+                    document_changes: Some(DocumentChanges::Operations(vec![
+                        DocumentChangeOperation::Op(ResourceOp::Create(cf)),
+                    ])),
+                    change_annotations: None,
+                }),
+                ..Default::default()
+            }));
+        }
+    } else {
+        for command in [
+            ("Reset variables", "reset_variables"),
+            ("Warn about unused", "warn"),
+        ] {
+            commands.push(CodeActionOrCommand::CodeAction(CodeAction {
+                title: command.0.to_string(),
+                kind: Some(CodeActionKind::EMPTY),
+                command: Some(Command::new(
+                    command.1.to_string(),
+                    command.1.to_string(),
+                    None,
+                )),
+                ..Default::default()
+            }));
+        }
     }
     commands
 }
@@ -182,7 +210,7 @@ impl Backend {
             lsp_sender.clone(),
             lsp_recv,
         );
-        diagnostics_task(client.clone(), diagnostic_recv);
+        diagnostics_task(client.clone(), diagnostic_recv, lsp_sender.clone());
         Self {
             main_channel: lsp_sender,
         }

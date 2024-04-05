@@ -137,13 +137,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "example"
-version = "0.1.0"
-dependencies = [
- "minijinja",
-]
-
-[[package]]
 name = "form_urlencoded"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -286,7 +279,7 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jinja-lsp"
-version = "0.1.71"
+version = "0.1.80"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -304,12 +297,13 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.71"
+version = "0.1.80"
 dependencies = [
  "ropey",
  "tower-lsp",
  "tree-sitter",
  "tree-sitter-jinja2",
+ "tree-sitter-python",
  "tree-sitter-rust",
 ]
 
@@ -353,15 +347,6 @@ name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
-
-[[package]]
-name = "minijinja"
-version = "1.0.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb3bf58a1ec4f3f228bec851a2066c7717ad308817cd8a08f67c10660c6ff7b"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "miniz_oxide"
@@ -829,6 +814,16 @@ name = "tree-sitter-jinja2"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06e13eeb9c161d95d0a4326f84aee63006820b1b5bb0206d86fa347cd2f0258b"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-python"
+version = "0.20.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c93b1b1fbd0d399db3445f51fd3058e43d0b4dcff62ddbdb46e66550978aa5"
 dependencies = [
  "cc",
  "tree-sitter",

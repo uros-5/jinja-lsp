@@ -20,7 +20,7 @@ export function activate(context: ExtensionContext) {
 	// The server is implemented in node
 	const serverModule = getServer();
 	if (!serverModule.valid) {
-		throw new Error(serverModule.name);	
+		throw new Error(serverModule.name);
 	}
 
 	let config: Record<string, any> = JSON.parse(
@@ -30,7 +30,7 @@ export function activate(context: ExtensionContext) {
 	// If the extension is launched in debug mode then the debug server options are used
 	// Otherwise the run options are used
 	const serverOptions: ServerOptions = {
-		run: { command: serverModule.name},
+		run: { command: serverModule.name },
 		debug: {
 			command: serverModule.name,
 			args: [],
@@ -40,11 +40,11 @@ export function activate(context: ExtensionContext) {
 	// Options to control the language client
 	const clientOptions: LanguageClientOptions = {
 		// Register the server for plain text documents
-		documentSelector: [{ scheme: 'file', language: 'jinja-html' }, { scheme: 'file', language: 'rust' }],
+		documentSelector: [{ scheme: 'file', language: 'jinja-html' }, { scheme: 'file', language: 'rust' }, { scheme: 'file', language: 'python' }],
 		initializationOptions: config,
 		synchronize: {
 			// Notify the server about file changes to '.clientrc files contained in the workspace
-			fileEvents: workspace.createFileSystemWatcher('**/.{jinja, rs}')
+			fileEvents: workspace.createFileSystemWatcher('**/.{jinja, rs, python}')
 		}
 	};
 

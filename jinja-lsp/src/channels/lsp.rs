@@ -1,18 +1,24 @@
-use jinja_lsp_queries::search::{objects::CompletionType, snippets_completion::snippets};
+use jinja_lsp_queries::search::{
+    objects::CompletionType, snippets_completion::snippets, Identifier,
+};
 use serde_json::Value;
-use tokio::sync::{mpsc, oneshot};
+use std::{collections::HashMap, time::Duration};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::sleep,
+};
 use tower_lsp::{
     lsp_types::{
-        CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CompletionItem,
-        CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
-        CompletionTextEdit, DidChangeConfigurationParams, DidChangeTextDocumentParams,
-        DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
-        DocumentSymbolResponse, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
-        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, InitializeResult, InsertReplaceEdit,
-        MarkupContent, MarkupKind, MessageType, OneOf, ServerCapabilities, ServerInfo,
-        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-        TextDocumentSyncSaveOptions, TextEdit,
+        CodeActionKind, CodeActionOptions, CodeActionParams, CodeActionProviderCapability,
+        CodeActionResponse, CompletionItem, CompletionItemKind, CompletionOptions,
+        CompletionParams, CompletionResponse, CompletionTextEdit, DidChangeConfigurationParams,
+        DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+        DocumentSymbolParams, DocumentSymbolResponse, Documentation, ExecuteCommandOptions,
+        ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
+        HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
+        InsertReplaceEdit, MarkupContent, MarkupKind, MessageType, OneOf, ServerCapabilities,
+        ServerInfo, TextDocumentIdentifier, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, WorkDoneProgressOptions,
     },
     Client,
 };
@@ -21,7 +27,7 @@ use crate::{
     backend::code_actions,
     config::{walkdir, JinjaConfig},
     filter::init_filter_completions,
-    lsp_files2::LspFiles,
+    lsp_files2::{JinjaCodeAction, LspFiles},
 };
 
 use super::diagnostics::DiagnosticMessage;
@@ -97,7 +103,7 @@ pub fn lsp_task(
                         },
                         server_info: Some(ServerInfo {
                             name: String::from("jinja-lsp"),
-                            version: Some(String::from("0.1.62")),
+                            version: Some(String::from("0.1.80")),
                         }),
                         offset_encoding: None,
                     };
@@ -115,7 +121,7 @@ pub fn lsp_task(
                             .log_message(MessageType::WARNING, "Template directory not found")
                             .await;
                     }
-                    if config.lang != "rust" {
+                    if !["rust", "python"].contains(&config.lang.as_str()) {
                         client
                             .log_message(MessageType::WARNING, "Backend language not supported")
                             .await;
@@ -262,9 +268,27 @@ pub fn lsp_task(
                     }
                 }
                 LspMessage::CodeAction(params, sender) => {
-                    if let Some(is_code_action) = lsp_data.code_action(params) {
-                        if is_code_action {
-                            let _ = sender.send(Some(code_actions()));
+                    let param = DidSaveTextDocumentParams {
+                        text_document: TextDocumentIdentifier::new(
+                            params.text_document.uri.to_owned(),
+                        ),
+                        text: None,
+                    };
+                    if let Some(code_action) = lsp_data.code_action2(params) {
+                        match code_action {
+                            JinjaCodeAction::Reset => {
+                                let _ = sender.send(Some(code_actions(None)));
+                            }
+                            JinjaCodeAction::CreateTemplate(template) => {
+                                let templates = lsp_data.config.templates.to_owned();
+                                let _ =
+                                    sender.send(Some(code_actions(Some((templates, template)))));
+                                let lsp_channel = lsp_channel.clone();
+                                tokio::spawn(async move {
+                                    sleep(Duration::from_millis(1400)).await;
+                                    let _ = lsp_channel.send(LspMessage::DidSave(param)).await;
+                                });
+                            }
                         }
                     }
                 }
@@ -298,6 +322,9 @@ pub fn lsp_task(
                     }
                     let _ = lsp_channel.send(LspMessage::Initialized(sender)).await;
                 }
+                LspMessage::CodeActions(code_actions) => {
+                    lsp_data.add_code_actions(code_actions);
+                }
             }
         }
     });
@@ -328,4 +355,5 @@ pub enum LspMessage {
         oneshot::Sender<Option<DocumentSymbolResponse>>,
     ),
     DidChangeConfiguration(DidChangeConfigurationParams),
+    CodeActions(HashMap<String, Vec<Identifier>>),
 }

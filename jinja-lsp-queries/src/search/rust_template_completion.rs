@@ -3,17 +3,12 @@ use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 use super::{Identifier, IdentifierType};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct RustTemplateCompletion {
-    pub template_name: Identifier,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct RustTemplates {
+pub struct BackendTemplates {
     pub templates: Vec<Identifier>,
     in_method: bool,
 }
 
-impl RustTemplates {
+impl BackendTemplates {
     pub fn in_template(&self, trigger_point: Point) -> Option<&Identifier> {
         let last = self.templates.last()?;
         if trigger_point >= last.start && trigger_point <= last.end {
@@ -48,14 +43,14 @@ impl RustTemplates {
     }
 }
 
-pub fn rust_templates_query(
+pub fn backend_templates_query(
     query: &Query,
     tree: &Tree,
     trigger_point: Point,
     text: &str,
     all: bool,
-) -> RustTemplates {
-    let mut templates = RustTemplates::default();
+) -> BackendTemplates {
+    let mut templates = BackendTemplates::default();
     let closest_node = tree.root_node();
     let mut cursor_qry = QueryCursor::new();
     let capture_names = query.capture_names();

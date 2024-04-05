@@ -1,6 +1,11 @@
-<img src="https://raw.githubusercontent.com/uros-5/jinja-lsp/main/.github/banner.png" alt="" />
+<img src="https://raw.githubusercontent.com/uros-5/jinja-lsp/main/.github/banner.png" alt="banner" />
 
 jinja-lsp enhances minijinja development experience by providing Helix/Nvim users with advanced features such as autocomplete, syntax highlighting, hover, goto definition, code actions and linting.
+
+<div align="center">
+  <a href="https://crates.io/crates/jinja-lsp"><img alt="crates.io" src="https://img.shields.io/crates/v/jinja-lsp.svg?style=for-the-badge&color=fdbb39&logo=rust" height="20"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=urosmrkobrada.jinja-lsp"><img alt="visualstudio.com" src="https://vsmarketplacebadges.dev/version/urosmrkobrada.jinja-lsp.svg?color=007ACC" height="20"></a>
+</div>
 
 ## Installation
 
@@ -80,4 +85,4 @@ name = "jinja"
 language-servers = ["jinja-lsp"]
 ```
 
-[VSCode support](https://marketplace.visualstudio.com/search?term=jinja-lsp&target=VSCode&category=Other&sortBy=Relevance)
+Supported languages: Python, Rust

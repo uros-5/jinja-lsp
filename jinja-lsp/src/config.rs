@@ -1,8 +1,10 @@
 use std::{collections::HashMap, path::Path};
 
-use jinja_lsp_queries::tree_builder::LangType;
+use jinja_lsp_queries::{
+    search::Identifier,
+    tree_builder::{JinjaDiagnostic, LangType},
+};
 use serde::{Deserialize, Serialize};
-use tower_lsp::lsp_types::Diagnostic;
 use walkdir::WalkDir;
 
 use crate::lsp_files2::LspFiles;
@@ -23,7 +25,7 @@ impl JinjaConfig {
         match path.extension()?.to_str() {
             Some(e) => match e {
                 "html" | "jinja" | "j2" => Some(LangType::Template),
-                "rs" => Some(LangType::Backend),
+                "rs" | "py" => Some(LangType::Backend),
                 _ => None,
             },
             None => None,
@@ -36,13 +38,21 @@ impl JinjaConfig {
     }
 }
 
-pub type InitLsp = (HashMap<String, Vec<Diagnostic>>, LspFiles);
+pub type InitLsp = (
+    HashMap<String, Vec<(JinjaDiagnostic, Identifier)>>,
+    LspFiles,
+);
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
     let mut all = vec![config.templates.clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);
     let mut lsp_files = LspFiles::default();
+    lsp_files.config = config.clone();
+    if config.lang == "python" {
+        lsp_files.queries.update_backend(&config.lang);
+        lsp_files.parsers.update_backend(&config.lang);
+    }
     let mut diags = HashMap::new();
     for dir in all {
         let walk = WalkDir::new(dir);
@@ -59,7 +69,6 @@ pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
         }
     }
 
-    lsp_files.config = config.clone();
     lsp_files.read_trees(&mut diags);
     Ok((diags, lsp_files))
 }

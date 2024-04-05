@@ -25,29 +25,8 @@ impl Snippets {
             }
             "error_block" => {
                 self.is_error = true;
-                let count = capture.node.child_count();
-                if self.start == Point::default() {
-                    self.start = capture.node.start_position();
-                }
-                if count == 0 {
-                    self.start = capture.node.start_position();
-                    self.end = capture.node.end_position();
-                    self.end.column += 1;
-                    return None;
-                } else {
-                    let end = capture.node.start_position();
-                    let first = capture.node.child(0).unwrap();
-                    if self.start.row != end.row {
-                        self.start = capture.node.start_position();
-                        self.end = first.end_position();
-                        self.end.column += 1;
-                    } else {
-                        let first = capture.node.child(0).unwrap();
-                        self.end = first.start_position();
-                        self.end.column += 1;
-                    }
-                    return None;
-                }
+                self.end = capture.node.end_position();
+                return None;
             }
             "keyword" => {
                 self.keyword = capture.node.start_position();
@@ -58,6 +37,9 @@ impl Snippets {
     }
 
     pub fn to_complete(&self, trigger_point: Point) -> Option<Range> {
+        if self.is_error && trigger_point <= self.end {
+            return Some(Range::default());
+        }
         if self.is_error && trigger_point >= self.start && trigger_point <= self.end {
             if self.keyword >= self.start && self.keyword <= self.end {
                 return None;

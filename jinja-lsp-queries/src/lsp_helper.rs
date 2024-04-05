@@ -19,7 +19,7 @@ pub fn search_errors(
     file_name: &String,
     templates: &String,
     lang_type: LangType,
-) -> Option<Vec<Diagnostic>> {
+) -> Option<Vec<(JinjaDiagnostic, Identifier)>> {
     let mut diagnostics = vec![];
     match lang_type {
         LangType::Template => {
@@ -70,11 +70,7 @@ pub fn search_errors(
                     }
                 }
                 if to_warn {
-                    let diagnostic = create_diagnostic(
-                        &Identifier::from(&object),
-                        err_type.severity(),
-                        err_type.to_string(),
-                    );
+                    let diagnostic = (err_type, Identifier::from(&object));
                     diagnostics.push(diagnostic);
                 }
             }
@@ -90,15 +86,13 @@ pub fn search_errors(
             for i in id_templates {
                 let err_type = JinjaDiagnostic::TemplateNotFound;
                 if i.name.is_empty() {
-                    let diagnostic =
-                        create_diagnostic(i, err_type.severity(), err_type.to_string());
+                    let diagnostic = (err_type, i.to_owned());
                     diagnostics.push(diagnostic);
                 } else {
                     let path = format!("{templates}/{}", i.name);
                     if let Err(err) = std::fs::canonicalize(path) {
                         if err.kind() == ErrorKind::NotFound {
-                            let diagnostic =
-                                create_diagnostic(i, err_type.severity(), err_type.to_string());
+                            let diagnostic = (err_type, i.to_owned());
                             diagnostics.push(diagnostic);
                         }
                     }
@@ -115,11 +109,7 @@ pub fn search_errors(
                 let path = format!("{templates}/{}", template.name);
                 if let Err(err) = std::fs::canonicalize(path) {
                     if err.kind() == ErrorKind::NotFound {
-                        let diagnostic = create_diagnostic(
-                            template,
-                            DiagnosticSeverity::WARNING,
-                            "Template not found".to_string(),
-                        );
+                        let diagnostic = (JinjaDiagnostic::TemplateNotFound, template.to_owned());
                         diagnostics.push(diagnostic);
                     }
                 }

@@ -5,8 +5,8 @@ pub struct Queries {
     pub jinja_definitions: Query,
     pub jinja_objects: Query,
     pub jinja_imports: Query,
-    pub rust_definitions: Query,
-    pub rust_templates: Query,
+    pub backend_definitions: Query,
+    pub backend_templates: Query,
     pub jinja_snippets: Query,
 }
 
@@ -21,10 +21,22 @@ impl Default for Queries {
         Self {
             jinja_definitions: Query::new(tree_sitter_jinja2::language(), DEFINITIONS).unwrap(),
             jinja_objects: Query::new(tree_sitter_jinja2::language(), OBJECTS).unwrap(),
-            rust_definitions: Query::new(tree_sitter_rust::language(), RUST_DEFINITIONS).unwrap(),
+            backend_definitions: Query::new(tree_sitter_rust::language(), RUST_DEFINITIONS)
+                .unwrap(),
             jinja_imports: Query::new(tree_sitter_jinja2::language(), JINJA_IMPORTS).unwrap(),
-            rust_templates: Query::new(tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
+            backend_templates: Query::new(tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
             jinja_snippets: Query::new(tree_sitter_jinja2::language(), JINJA_SNIPPETS).unwrap(),
+        }
+    }
+}
+
+impl Queries {
+    pub fn update_backend(&mut self, lang: &str) {
+        if lang == "python" {
+            self.backend_templates =
+                Query::new(tree_sitter_python::language(), PYTHON_TEMPLATES).unwrap();
+            self.backend_definitions =
+                Query::new(tree_sitter_python::language(), PYTHON_DEFINITIONS).unwrap();
         }
     }
 }
@@ -79,6 +91,8 @@ pub static RUST_DEFINITIONS: &str = r#"
         (#match? @method "(add_global|add_filter|add_function)")
     
     ) @function
+
+    (ERROR) @error
 ])
 "#;
 
@@ -196,4 +210,65 @@ const DEFINITIONS: &str = r#"
 )
 
 (ERROR) @error
+"#;
+
+const PYTHON_TEMPLATES: &str = r#"
+(call
+    [
+      (attribute
+      	(identifier) @method_name
+      )
+      (identifier) @method_name
+      (#any-of? @method_name "render_jinja" "get_template")
+    ]
+    (argument_list
+      (string)+ @template_name
+    )
+)
+"#;
+
+pub static PYTHON_DEFINITIONS: &str = r#"
+
+(
+  (subscript
+    (attribute
+      object: (identifier)* @object
+      attribute: (identifier) @field
+      (#match? @field "^(globals|filters)$")
+      (#eq? @object "jinja_env")
+    )
+      (string
+      	(string_content) @key_id
+      )   
+  )
+)
+
+(	
+	[
+      (call
+        function: (identifier) @method
+        arguments: (argument_list
+        	(keyword_argument
+            	name: (identifier) @key_id
+            )
+        )
+      )
+      
+      (call
+        function: (attribute
+          object: (identifier)
+          attribute: (identifier) @method
+        ) 
+        arguments: (argument_list
+        	(keyword_argument
+            	name: (identifier) @key_id
+            )
+        )
+      )
+    ]
+	(#match? @method "^(render_template|render)$")
+  )
+  
+  (ERROR) @error
+
 "#;

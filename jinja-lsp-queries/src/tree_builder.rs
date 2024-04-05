@@ -6,6 +6,7 @@ pub enum LangType {
     Backend,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum JinjaDiagnostic {
     DefinedSomewhere,
     Undefined,

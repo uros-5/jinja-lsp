@@ -1,5 +1,5 @@
 use jinja_lsp_queries::{
-    lsp_helper::search_errors,
+    lsp_helper::{path_items, search_errors},
     search::{
         completion_start, definition::definition_query, objects::objects_query, queries::Queries,
         rust_identifiers::backend_definition_query,
@@ -16,8 +16,10 @@ use std::{
 };
 use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
-    CompletionItemKind, CompletionTextEdit, DidOpenTextDocumentParams, DocumentSymbol,
-    DocumentSymbolResponse, TextDocumentIdentifier, TextEdit,
+    CodeAction, CodeActionKind, CodeActionOrCommand, Command, CompletionItemKind,
+    CompletionTextEdit, CreateFile, CreateFileOptions, DidOpenTextDocumentParams,
+    DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolResponse, ResourceOp,
+    TextDocumentIdentifier, TextEdit, WorkspaceEdit,
 };
 
 use jinja_lsp_queries::{
@@ -207,7 +209,7 @@ impl LspFiles {
             &self.queries,
             &self.variables,
             &name.to_string(),
-            &self.config.templates,
+            self.config.templates.clone(),
             lang_type,
         )
     }
@@ -400,8 +402,8 @@ impl LspFiles {
                     let query = &self.queries.jinja_imports;
                     let query = templates_query(query, tree, point, &writter.content, false);
                     let identifier = query.in_template(point)?.get_identifier(point)?;
-                    let dir = &self.config.templates;
-                    let path = format!("{dir}/{}", identifier.name);
+                    let mut path = self.config.templates.clone();
+                    path.push(&identifier.name);
                     let buffer = std::fs::canonicalize(path).ok()?;
                     let url = format!("file://{}", buffer.to_str()?);
                     let url = Url::parse(&url).ok()?;
@@ -437,8 +439,8 @@ impl LspFiles {
                 let templates =
                     backend_templates_query(query, tree, point, &writter.content, false);
                 let template = templates.in_template(point)?;
-                let dir = &self.config.templates;
-                let path = format!("{dir}/{}", template.name);
+                let mut path = self.config.templates.clone();
+                path.push(&template.name);
                 let buffer = std::fs::canonicalize(path).ok()?;
                 let url = format!("file://{}", buffer.to_str()?);
                 let url = Url::parse(&url).ok()?;
@@ -449,27 +451,7 @@ impl LspFiles {
         }
     }
 
-    pub fn code_action(&self, action_params: CodeActionParams) -> Option<bool> {
-        let uri = action_params.text_document.uri.to_string();
-        let lang_type = self.config.file_ext(&Path::new(&uri));
-        let can_def = lang_type.map_or(false, |lang_type| lang_type == LangType::Template);
-        if !can_def {
-            return None;
-        }
-        let row = action_params.range.start.line;
-        let column = action_params.range.start.character;
-        let point = Point::new(row as usize, column as usize);
-        let trees = self.trees.get(&LangType::Template)?;
-        let tree = trees.get(&uri)?;
-        let query = &self.queries.jinja_objects;
-        let doc = self.documents.get(&uri)?;
-        let mut writter = FileWriter::default();
-        let _ = doc.write_to(&mut writter);
-        let objects = objects_query(query, tree, point, &writter.content, false);
-        Some(objects.in_expr(point))
-    }
-
-    pub fn code_action2(&self, action_params: CodeActionParams) -> Option<JinjaCodeAction> {
+    pub fn code_action(&self, action_params: CodeActionParams) -> Option<JinjaCodeAction> {
         let uri = action_params.text_document.uri.to_string();
         let lang_type = self.config.file_ext(&Path::new(&uri))?;
         let row = action_params.range.start.line;
@@ -504,6 +486,70 @@ impl LspFiles {
                     return Some(JinjaCodeAction::CreateTemplate(code_action.name.to_owned()));
                 }
                 None
+            }
+        }
+    }
+
+    pub fn process_code_actions(
+        &self,
+        code_action: JinjaCodeAction,
+        param: DidSaveTextDocumentParams,
+    ) -> Option<Vec<CodeActionOrCommand>> {
+        let mut commands = vec![];
+        match code_action {
+            JinjaCodeAction::Reset => {
+                for command in [
+                    ("Reset variables", "reset_variables"),
+                    ("Warn about unused", "warn"),
+                ] {
+                    commands.push(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: command.0.to_string(),
+                        kind: Some(CodeActionKind::EMPTY),
+                        command: Some(Command::new(
+                            command.1.to_string(),
+                            command.1.to_string(),
+                            None,
+                        )),
+                        ..Default::default()
+                    }));
+                }
+                Some(commands)
+            }
+            JinjaCodeAction::CreateTemplate(template) => {
+                let templates = self.config.templates.to_owned();
+                if let Ok(mut path) = std::fs::canonicalize(templates) {
+                    path.push(path_items(&template));
+                    let name = format!("file:///{}", path.to_str().unwrap());
+                    let cf = CreateFile {
+                        uri: Url::parse(&name).unwrap(),
+                        options: Some(CreateFileOptions {
+                            overwrite: Some(false),
+                            ignore_if_exists: Some(true),
+                        }),
+                        annotation_id: None,
+                    };
+                    commands.push(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: "Generate new template".to_string(),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        edit: Some(WorkspaceEdit {
+                            changes: None,
+                            document_changes: Some(DocumentChanges::Operations(vec![
+                                DocumentChangeOperation::Op(ResourceOp::Create(cf)),
+                            ])),
+                            change_annotations: None,
+                        }),
+                        ..Default::default()
+                    }));
+                }
+
+                let lsp_channel = self.main_channel.clone();
+                tokio::spawn(async move {
+                    sleep(Duration::from_millis(1400)).await;
+                    if let Some(lsp_channel) = lsp_channel {
+                        let _ = lsp_channel.send(LspMessage::DidSave(param)).await;
+                    }
+                });
+                Some(commands)
             }
         }
     }
@@ -582,7 +628,13 @@ impl LspFiles {
             .filter(|template| template.contains(&prefix));
         let mut abc = vec![];
         for template in templates {
-            let c = &self.config.templates.replace('.', "");
+            let c = &self
+                .config
+                .templates
+                .as_path()
+                .to_str()
+                .unwrap()
+                .replace('.', "");
             let mut parts = template.split(c);
             parts.next();
             let label = parts.next()?.replacen('/', "", 1);

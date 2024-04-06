@@ -6,18 +6,17 @@ use tokio::sync::{
 use tower_lsp::{
     jsonrpc::Result,
     lsp_types::{
-        CompletionParams, CompletionResponse, CreateFile, CreateFileOptions,
-        DidChangeConfigurationParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-        DocumentChangeOperation, DocumentChanges, DocumentSymbolParams, DocumentSymbolResponse,
-        InitializeParams, InitializeResult, ResourceOp, Url, WorkspaceEdit,
+        CompletionParams, CompletionResponse, DidChangeConfigurationParams,
+        DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
+        DocumentSymbolResponse, InitializeParams, InitializeResult,
     },
     Client, LanguageServer,
 };
 
 use tower_lsp::lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse, Command,
-    DidChangeTextDocumentParams, DidSaveTextDocumentParams, ExecuteCommandParams,
-    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, InitializedParams,
+    CodeActionParams, CodeActionResponse, DidChangeTextDocumentParams, DidSaveTextDocumentParams,
+    ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
+    InitializedParams,
 };
 
 use crate::channels::{
@@ -154,52 +153,6 @@ impl LanguageServer for Backend {
     }
 }
 
-pub fn code_actions(template: Option<(String, String)>) -> Vec<CodeActionOrCommand> {
-    let mut commands = vec![];
-    if let Some((templates, template)) = template {
-        if let Ok(path) = std::fs::canonicalize(templates) {
-            let name = format!("file://{}/{template}", path.to_str().unwrap());
-            let cf = CreateFile {
-                uri: Url::parse(&name).unwrap(),
-                options: Some(CreateFileOptions {
-                    overwrite: Some(false),
-                    ignore_if_exists: Some(true),
-                }),
-                annotation_id: None,
-            };
-
-            commands.push(CodeActionOrCommand::CodeAction(CodeAction {
-                title: "Generate new template".to_string(),
-                kind: Some(CodeActionKind::QUICKFIX),
-                edit: Some(WorkspaceEdit {
-                    changes: None,
-                    document_changes: Some(DocumentChanges::Operations(vec![
-                        DocumentChangeOperation::Op(ResourceOp::Create(cf)),
-                    ])),
-                    change_annotations: None,
-                }),
-                ..Default::default()
-            }));
-        }
-    } else {
-        for command in [
-            ("Reset variables", "reset_variables"),
-            ("Warn about unused", "warn"),
-        ] {
-            commands.push(CodeActionOrCommand::CodeAction(CodeAction {
-                title: command.0.to_string(),
-                kind: Some(CodeActionKind::EMPTY),
-                command: Some(Command::new(
-                    command.1.to_string(),
-                    command.1.to_string(),
-                    None,
-                )),
-                ..Default::default()
-            }));
-        }
-    }
-    commands
-}
 impl Backend {
     pub fn new(client: Client) -> Self {
         let (lsp_sender, lsp_recv) = mpsc::channel(50);

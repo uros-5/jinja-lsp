@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::ErrorKind};
+use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
 
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 use tree_sitter::{Point, Tree};
@@ -17,7 +17,7 @@ pub fn search_errors(
     queries: &Queries,
     variables: &HashMap<String, Vec<Identifier>>,
     file_name: &String,
-    templates: &String,
+    templates: PathBuf,
     lang_type: LangType,
 ) -> Option<Vec<(JinjaDiagnostic, Identifier)>> {
     let mut diagnostics = vec![];
@@ -89,8 +89,9 @@ pub fn search_errors(
                     let diagnostic = (err_type, i.to_owned());
                     diagnostics.push(diagnostic);
                 } else {
-                    let path = format!("{templates}/{}", i.name);
-                    if let Err(err) = std::fs::canonicalize(path) {
+                    let mut templates = templates.clone();
+                    templates.push(path_items(&i.name));
+                    if let Err(err) = std::fs::canonicalize(templates) {
                         if err.kind() == ErrorKind::NotFound {
                             let diagnostic = (err_type, i.to_owned());
                             diagnostics.push(diagnostic);
@@ -106,8 +107,9 @@ pub fn search_errors(
                 .iter()
                 .filter(|id| id.identifier_type == IdentifierType::JinjaTemplate);
             for template in templates2 {
-                let path = format!("{templates}/{}", template.name);
-                if let Err(err) = std::fs::canonicalize(path) {
+                let mut templates = templates.clone();
+                templates.push(path_items(&template.name));
+                if let Err(err) = std::fs::canonicalize(templates) {
                     if err.kind() == ErrorKind::NotFound {
                         let diagnostic = (JinjaDiagnostic::TemplateNotFound, template.to_owned());
                         diagnostics.push(diagnostic);
@@ -134,4 +136,8 @@ pub fn create_diagnostic(
         source: Some(String::from("jinja-lsp")),
         ..Default::default()
     }
+}
+
+pub fn path_items(template: &str) -> PathBuf {
+    template.split('/').collect()
 }

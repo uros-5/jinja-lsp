@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use jinja_lsp_queries::{
     search::Identifier,
@@ -7,13 +10,13 @@ use jinja_lsp_queries::{
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-use crate::lsp_files2::LspFiles;
+use crate::lsp_files::LspFiles;
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct JinjaConfig {
-    pub templates: String,
+    pub templates: PathBuf,
     pub backend: Vec<String>,
     pub lang: String,
     #[serde(skip)]
@@ -44,7 +47,7 @@ pub type InitLsp = (
 );
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
-    let mut all = vec![config.templates.clone()];
+    let mut all = vec![config.templates.to_str().unwrap().to_string().clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);
     let mut lsp_files = LspFiles::default();

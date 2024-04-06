@@ -2,32 +2,28 @@ use jinja_lsp_queries::search::{
     objects::CompletionType, snippets_completion::snippets, Identifier,
 };
 use serde_json::Value;
-use std::{collections::HashMap, time::Duration};
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::sleep,
-};
+use std::collections::HashMap;
+use tokio::sync::{mpsc, oneshot};
 use tower_lsp::{
     lsp_types::{
-        CodeActionKind, CodeActionOptions, CodeActionParams, CodeActionProviderCapability,
-        CodeActionResponse, CompletionItem, CompletionItemKind, CompletionOptions,
-        CompletionParams, CompletionResponse, CompletionTextEdit, DidChangeConfigurationParams,
-        DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-        DocumentSymbolParams, DocumentSymbolResponse, Documentation, ExecuteCommandOptions,
-        ExecuteCommandParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
-        HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
-        InsertReplaceEdit, MarkupContent, MarkupKind, MessageType, OneOf, ServerCapabilities,
-        ServerInfo, TextDocumentIdentifier, TextDocumentSyncCapability, TextDocumentSyncKind,
-        TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, WorkDoneProgressOptions,
+        CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CompletionItem,
+        CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
+        CompletionTextEdit, DidChangeConfigurationParams, DidChangeTextDocumentParams,
+        DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
+        DocumentSymbolResponse, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
+        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+        HoverProviderCapability, InitializeParams, InitializeResult, InsertReplaceEdit,
+        MarkupContent, MarkupKind, MessageType, OneOf, ServerCapabilities, ServerInfo,
+        TextDocumentIdentifier, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit,
     },
     Client,
 };
 
 use crate::{
-    backend::code_actions,
     config::{walkdir, JinjaConfig},
     filter::init_filter_completions,
-    lsp_files2::{JinjaCodeAction, LspFiles},
+    lsp_files::LspFiles,
 };
 
 use super::diagnostics::DiagnosticMessage;
@@ -116,7 +112,7 @@ pub fn lsp_task(
                             .log_message(MessageType::WARNING, "Config doesn't exist.")
                             .await;
                     }
-                    if config.templates.is_empty() {
+                    if config.templates.as_path().to_str().unwrap().is_empty() {
                         client
                             .log_message(MessageType::WARNING, "Template directory not found")
                             .await;
@@ -274,21 +270,11 @@ pub fn lsp_task(
                         ),
                         text: None,
                     };
-                    if let Some(code_action) = lsp_data.code_action2(params) {
-                        match code_action {
-                            JinjaCodeAction::Reset => {
-                                let _ = sender.send(Some(code_actions(None)));
-                            }
-                            JinjaCodeAction::CreateTemplate(template) => {
-                                let templates = lsp_data.config.templates.to_owned();
-                                let _ =
-                                    sender.send(Some(code_actions(Some((templates, template)))));
-                                let lsp_channel = lsp_channel.clone();
-                                tokio::spawn(async move {
-                                    sleep(Duration::from_millis(1400)).await;
-                                    let _ = lsp_channel.send(LspMessage::DidSave(param)).await;
-                                });
-                            }
+                    if let Some(code_action) = lsp_data.code_action(params) {
+                        if let Some(code_actions) =
+                            lsp_data.process_code_actions(code_action, param)
+                        {
+                            let _ = sender.send(Some(code_actions));
                         }
                     }
                 }

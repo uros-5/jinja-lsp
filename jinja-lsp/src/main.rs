@@ -2,7 +2,7 @@ mod backend;
 pub mod channels;
 mod config;
 mod filter;
-pub mod lsp_files2;
+pub mod lsp_files;
 
 use backend::Backend;
 use tower_lsp::LspService;

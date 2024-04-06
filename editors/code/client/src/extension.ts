@@ -44,7 +44,7 @@ export function activate(context: ExtensionContext) {
 		initializationOptions: config,
 		synchronize: {
 			// Notify the server about file changes to '.clientrc files contained in the workspace
-			fileEvents: workspace.createFileSystemWatcher('**/.{jinja, rs, python}')
+			fileEvents: workspace.createFileSystemWatcher('**/.{jinja, rs, py}')
 		}
 	};
 

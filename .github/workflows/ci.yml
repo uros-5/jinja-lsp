@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Rust env
+        uses: ./.github/actions/setup-rust-env
+
+      - name: Rust clippy
+        run: cargo clippy -- -Dclippy::all -D warnings
+
+  rustfmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Rust env
+        uses: ./.github/actions/setup-rust-env
+
+      - name: Rust fmt
+        run: cargo fmt --check
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Rust env
+        uses: "./.github/actions/setup-rust-env"
+
+      - name: Rust test
+        run: cargo test --workspace

@@ -223,7 +223,7 @@ impl JinjaDefinitions {
                 let current_scope = self.current_scope.front().unwrap_or(&Scope::default()).id;
                 identifier.start = start;
                 identifier.end = end;
-                identifier.name = content.to_owned();
+                content.to_owned().clone_into(&mut identifier.name);
                 identifier.scope_ends.0 = current_scope;
                 let last = self.definitions.last_mut();
                 if let Some(last) = last {

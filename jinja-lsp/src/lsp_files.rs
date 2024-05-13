@@ -383,7 +383,7 @@ impl LspFiles {
                 let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
                 let mut res = objects.is_ident(point).and_then(|ident| {
-                    current_ident = ident.to_owned();
+                    ident.clone_into(&mut current_ident);
                     let variables = self.variables.get(&uri)?;
                     let max = variables
                         .iter()
@@ -676,7 +676,7 @@ impl LspFiles {
     }
 
     pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {
-        let this_file = self.variables.get(&uri.as_str().to_string())?;
+        let this_file = self.variables.get(uri.as_str())?;
         let this_file = this_file
             .iter()
             .filter(|variable| variable.identifier_type != IdentifierType::TemplateBlock)

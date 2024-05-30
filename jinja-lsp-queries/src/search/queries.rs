@@ -19,13 +19,13 @@ impl Clone for Queries {
 impl Default for Queries {
     fn default() -> Self {
         Self {
-            jinja_definitions: Query::new(tree_sitter_jinja2::language(), DEFINITIONS).unwrap(),
-            jinja_objects: Query::new(tree_sitter_jinja2::language(), OBJECTS).unwrap(),
-            backend_definitions: Query::new(tree_sitter_rust::language(), RUST_DEFINITIONS)
+            jinja_definitions: Query::new(&tree_sitter_jinja2::language(), DEFINITIONS).unwrap(),
+            jinja_objects: Query::new(&tree_sitter_jinja2::language(), OBJECTS).unwrap(),
+            backend_definitions: Query::new(&tree_sitter_rust::language(), RUST_DEFINITIONS)
                 .unwrap(),
-            jinja_imports: Query::new(tree_sitter_jinja2::language(), JINJA_IMPORTS).unwrap(),
-            backend_templates: Query::new(tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
-            jinja_snippets: Query::new(tree_sitter_jinja2::language(), JINJA_SNIPPETS).unwrap(),
+            jinja_imports: Query::new(&tree_sitter_jinja2::language(), JINJA_IMPORTS).unwrap(),
+            backend_templates: Query::new(&tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
+            jinja_snippets: Query::new(&tree_sitter_jinja2::language(), JINJA_SNIPPETS).unwrap(),
         }
     }
 }
@@ -34,9 +34,9 @@ impl Queries {
     pub fn update_backend(&mut self, lang: &str) {
         if lang == "python" {
             self.backend_templates =
-                Query::new(tree_sitter_python::language(), PYTHON_TEMPLATES).unwrap();
+                Query::new(&tree_sitter_python::language(), PYTHON_TEMPLATES).unwrap();
             self.backend_definitions =
-                Query::new(tree_sitter_python::language(), PYTHON_DEFINITIONS).unwrap();
+                Query::new(&tree_sitter_python::language(), PYTHON_DEFINITIONS).unwrap();
         }
     }
 }
@@ -169,7 +169,7 @@ const JINJA_SNIPPETS: &str = r#"
 	(statement_begin) @start
 	(statement_end) @end
     (ERROR
-        (ERROR) @error
+        (ERROR)? @error
     ) @error_block 
 	
     (

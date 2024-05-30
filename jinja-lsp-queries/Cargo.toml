@@ -6,10 +6,10 @@ description = "TreeSitter queries for jinja-lsp"
 license = "MIT"
 
 [dependencies]
-tree-sitter = "0.20.10"
-tree-sitter-jinja2 = "0.0.6"
-tree-sitter-rust = "0.20.4"
+tree-sitter = "0.21.0"
+tree-sitter-jinja2 = "0.0.7"
+tree-sitter-rust = "0.21.0"
 tower-lsp = { version = "0.20.0", features = ["proposed"] }
 ropey = "1.5.0"
-tree-sitter-python = "=0.20.4"
+tree-sitter-python = "=0.21.0"
 

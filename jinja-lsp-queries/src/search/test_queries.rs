@@ -17,7 +17,7 @@ mod query_tests {
         let mut parser = Parser::new();
 
         parser
-            .set_language(language)
+            .set_language(&language)
             .expect("could not load jinja grammar");
 
         parser.parse(text, None).expect("not to fail")
@@ -28,7 +28,7 @@ mod query_tests {
         let mut parser = Parser::new();
 
         parser
-            .set_language(language)
+            .set_language(&language)
             .expect("could not load rust grammar");
 
         parser.parse(text, None).expect("not to fail")
@@ -39,7 +39,7 @@ mod query_tests {
         let mut parser = Parser::new();
 
         parser
-            .set_language(language)
+            .set_language(&language)
             .expect("could not load rust grammar");
 
         parser.parse(text, None).expect("not to fail")

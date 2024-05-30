@@ -14,6 +14,7 @@ pub struct Snippets {
 
 impl Snippets {
     pub fn check(&mut self, name: &str, capture: &QueryCapture<'_>) -> Option<()> {
+        dbg!(name);
         match name {
             "start" => {
                 let start = capture.node.start_position();

@@ -2,14 +2,13 @@
 {
   "version": "0.2.0",
   "configurations": [
-  
     {
       "type": "extensionHost",
       "request": "launch",
       "name": "Launch Client",
       "runtimeExecutable": "${execPath}",
       "args": [
-          "--extensionDevelopmentPath=${workspaceRoot}"
+        "--extensionDevelopmentPath=${workspaceRoot}"
       ],
       "outFiles": [
         "${workspaceRoot}/client/out/**/*.js"

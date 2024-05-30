@@ -1,0 +1,21 @@
+{
+  "name": "@iiiurosiii/jinja-lsp-nodejs-linux-arm64-musl",
+  "version": "0.0.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "jinja-lsp-nodejs.linux-arm64-musl.node",
+  "files": [
+    "jinja-lsp-nodejs.linux-arm64-musl.node"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  },
+  "libc": [
+    "musl"
+  ]
+}

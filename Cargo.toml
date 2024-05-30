@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "jinja-lsp-queries",
     "jinja-lsp",
+    "jinja-lsp-nodejs"
 ]
 
 [profile.dev]

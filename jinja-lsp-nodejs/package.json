@@ -1,0 +1,65 @@
+{
+  "name": "@iiiurosiii/jinja-lsp-nodejs",
+  "version": "0.0.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "jinja-lsp-nodejs",
+    "triples": {
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-linux-android",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "aarch64-pc-windows-msvc",
+        "armv7-unknown-linux-gnueabihf",
+        "armv7-unknown-linux-musleabihf",
+        "x86_64-unknown-linux-musl",
+        "x86_64-unknown-freebsd",
+        "i686-pc-windows-msvc",
+        "armv7-linux-androideabi",
+        "universal-apple-darwin",
+        "riscv64gc-unknown-linux-gnu"
+      ]
+    }
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.3",
+    "ava": "^6.0.1"
+  },
+  "ava": {
+    "timeout": "3m"
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "ava",
+    "universal": "napi universal",
+    "version": "napi version"
+  },
+  "packageManager": "yarn@4.2.2",
+  "optionalDependencies": {
+    "@iiiurosiii/jinja-lsp-nodejs-win32-x64-msvc": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-darwin-x64": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-x64-gnu": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-darwin-arm64": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-android-arm64": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-arm64-gnu": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-arm64-musl": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-win32-arm64-msvc": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-arm-gnueabihf": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-arm-musleabihf": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-x64-musl": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-freebsd-x64": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-win32-ia32-msvc": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-android-arm-eabi": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-darwin-universal": "0.0.0",
+    "@iiiurosiii/jinja-lsp-nodejs-linux-riscv64-gnu": "0.0.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@iiiurosiii/jinja-lsp-nodejs-linux-x64-gnu",
+  "version": "0.0.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "jinja-lsp-nodejs.linux-x64-gnu.node",
+  "files": [
+    "jinja-lsp-nodejs.linux-x64-gnu.node"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  },
+  "libc": [
+    "glibc"
+  ]
+}

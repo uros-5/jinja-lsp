@@ -1,11 +1,12 @@
 {
-  "name": "@iiiurosiii/jinja-lsp-nodejs",
-  "version": "0.0.0",
+  "name": "@jinja-lsp/functions",
+  "version": "0.0.2",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
-    "name": "jinja-lsp-nodejs",
+    "name": "functions",
     "triples": {
+      "defaults": false,
       "additional": [
         "aarch64-apple-darwin",
         "aarch64-linux-android",
@@ -19,7 +20,8 @@
         "i686-pc-windows-msvc",
         "armv7-linux-androideabi",
         "universal-apple-darwin",
-        "riscv64gc-unknown-linux-gnu"
+        "riscv64gc-unknown-linux-gnu",
+        "linux-x64-gnu"
       ]
     }
   },
@@ -44,22 +46,6 @@
     "version": "napi version"
   },
   "packageManager": "yarn@4.2.2",
-  "optionalDependencies": {
-    "@iiiurosiii/jinja-lsp-nodejs-win32-x64-msvc": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-darwin-x64": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-x64-gnu": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-darwin-arm64": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-android-arm64": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-arm64-gnu": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-arm64-musl": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-win32-arm64-msvc": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-arm-gnueabihf": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-arm-musleabihf": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-x64-musl": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-freebsd-x64": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-win32-ia32-msvc": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-android-arm-eabi": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-darwin-universal": "0.0.0",
-    "@iiiurosiii/jinja-lsp-nodejs-linux-riscv64-gnu": "0.0.0"
-  }
+  "repository": "https://github.com/uros-5/jinja-lsp",
+  "description": "Bindings for jinja-lsp"
 }

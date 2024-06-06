@@ -1,3 +1,3 @@
-# `@iiiurosiii/jinja-lsp-nodejs-linux-x64-musl`
+# `@jinja-lsp/functions-linux-x64-musl`
 
-This is the **x86_64-unknown-linux-musl** binary for `@iiiurosiii/jinja-lsp-nodejs`
+This is the **x86_64-unknown-linux-musl** binary for `@jinja-lsp/functions`

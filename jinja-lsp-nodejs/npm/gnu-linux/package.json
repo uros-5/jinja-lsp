@@ -1,15 +1,17 @@
 {
-  "name": "@jinja-lsp/functions-android-arm-eabi",
+  "name": "@jinja-lsp/functions-gnu-linux",
   "version": "0.0.2",
   "os": [
-    "android"
+    "gnu",
+    "linux"
   ],
   "cpu": [
-    "arm"
+    "linux",
+    "x64"
   ],
-  "main": "functions.android-arm-eabi.node",
+  "main": "functions.gnu-linux.node",
   "files": [
-    "functions.android-arm-eabi.node"
+    "functions.gnu-linux.node"
   ],
   "description": "Bindings for jinja-lsp",
   "license": "MIT",

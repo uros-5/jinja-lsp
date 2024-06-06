@@ -1,3 +1,3 @@
-# `@iiiurosiii/jinja-lsp-nodejs-win32-arm64-msvc`
+# `@jinja-lsp/functions-win32-arm64-msvc`
 
-This is the **aarch64-pc-windows-msvc** binary for `@iiiurosiii/jinja-lsp-nodejs`
+This is the **aarch64-pc-windows-msvc** binary for `@jinja-lsp/functions`

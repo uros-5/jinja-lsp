@@ -1,3 +1,3 @@
-# `@iiiurosiii/jinja-lsp-nodejs-android-arm64`
+# `@jinja-lsp/functions-android-arm64`
 
-This is the **aarch64-linux-android** binary for `@iiiurosiii/jinja-lsp-nodejs`
+This is the **aarch64-linux-android** binary for `@jinja-lsp/functions`

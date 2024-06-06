@@ -1,18 +1,20 @@
 {
-  "name": "@iiiurosiii/jinja-lsp-nodejs-linux-arm-gnueabihf",
-  "version": "0.0.0",
+  "name": "@jinja-lsp/functions-linux-arm-gnueabihf",
+  "version": "0.0.2",
   "os": [
     "linux"
   ],
   "cpu": [
     "arm"
   ],
-  "main": "jinja-lsp-nodejs.linux-arm-gnueabihf.node",
+  "main": "functions.linux-arm-gnueabihf.node",
   "files": [
-    "jinja-lsp-nodejs.linux-arm-gnueabihf.node"
+    "functions.linux-arm-gnueabihf.node"
   ],
+  "description": "Bindings for jinja-lsp",
   "license": "MIT",
   "engines": {
     "node": ">= 10"
-  }
+  },
+  "repository": "https://github.com/uros-5/jinja-lsp"
 }

@@ -1,18 +1,20 @@
 {
-  "name": "@iiiurosiii/jinja-lsp-nodejs-linux-arm-musleabihf",
-  "version": "0.0.0",
+  "name": "@jinja-lsp/functions-linux-arm-musleabihf",
+  "version": "0.0.2",
   "os": [
     "linux"
   ],
   "cpu": [
     "arm"
   ],
-  "main": "jinja-lsp-nodejs.linux-arm-musleabihf.node",
+  "main": "functions.linux-arm-musleabihf.node",
   "files": [
-    "jinja-lsp-nodejs.linux-arm-musleabihf.node"
+    "functions.linux-arm-musleabihf.node"
   ],
+  "description": "Bindings for jinja-lsp",
   "license": "MIT",
   "engines": {
     "node": ">= 10"
-  }
+  },
+  "repository": "https://github.com/uros-5/jinja-lsp"
 }

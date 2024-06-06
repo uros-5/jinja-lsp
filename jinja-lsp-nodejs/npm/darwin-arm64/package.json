@@ -1,18 +1,20 @@
 {
-  "name": "@iiiurosiii/jinja-lsp-nodejs-darwin-arm64",
-  "version": "0.0.0",
+  "name": "@jinja-lsp/functions-darwin-arm64",
+  "version": "0.0.2",
   "os": [
     "darwin"
   ],
   "cpu": [
     "arm64"
   ],
-  "main": "jinja-lsp-nodejs.darwin-arm64.node",
+  "main": "functions.darwin-arm64.node",
   "files": [
-    "jinja-lsp-nodejs.darwin-arm64.node"
+    "functions.darwin-arm64.node"
   ],
+  "description": "Bindings for jinja-lsp",
   "license": "MIT",
   "engines": {
     "node": ">= 10"
-  }
+  },
+  "repository": "https://github.com/uros-5/jinja-lsp"
 }

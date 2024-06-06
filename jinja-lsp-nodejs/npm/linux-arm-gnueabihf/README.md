@@ -1,3 +1,3 @@
-# `@iiiurosiii/jinja-lsp-nodejs-linux-arm-gnueabihf`
+# `@jinja-lsp/functions-linux-arm-gnueabihf`
 
-This is the **armv7-unknown-linux-gnueabihf** binary for `@iiiurosiii/jinja-lsp-nodejs`
+This is the **armv7-unknown-linux-gnueabihf** binary for `@jinja-lsp/functions`

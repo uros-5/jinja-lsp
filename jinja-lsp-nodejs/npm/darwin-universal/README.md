@@ -1,3 +1,3 @@
-# `@iiiurosiii/jinja-lsp-nodejs-darwin-universal`
+# `@jinja-lsp/functions-darwin-universal`
 
-This is the **universal-apple-darwin** binary for `@iiiurosiii/jinja-lsp-nodejs`
+This is the **universal-apple-darwin** binary for `@jinja-lsp/functions`

@@ -1,3 +1,3 @@
-# `@iiiurosiii/jinja-lsp-nodejs-linux-riscv64-gnu`
+# `@jinja-lsp/functions-linux-riscv64-gnu`
 
-This is the **riscv64gc-unknown-linux-gnu** binary for `@iiiurosiii/jinja-lsp-nodejs`
+This is the **riscv64gc-unknown-linux-gnu** binary for `@jinja-lsp/functions`

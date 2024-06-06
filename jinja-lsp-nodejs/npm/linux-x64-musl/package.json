@@ -1,20 +1,22 @@
 {
-  "name": "@iiiurosiii/jinja-lsp-nodejs-linux-x64-musl",
-  "version": "0.0.0",
+  "name": "@jinja-lsp/functions-linux-x64-musl",
+  "version": "0.0.2",
   "os": [
     "linux"
   ],
   "cpu": [
     "x64"
   ],
-  "main": "jinja-lsp-nodejs.linux-x64-musl.node",
+  "main": "functions.linux-x64-musl.node",
   "files": [
-    "jinja-lsp-nodejs.linux-x64-musl.node"
+    "functions.linux-x64-musl.node"
   ],
+  "description": "Bindings for jinja-lsp",
   "license": "MIT",
   "engines": {
     "node": ">= 10"
   },
+  "repository": "https://github.com/uros-5/jinja-lsp",
   "libc": [
     "musl"
   ]

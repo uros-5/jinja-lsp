@@ -8,11 +8,13 @@ use jinja_lsp::{
 use jinja_lsp_queries::{
   parsers::Parsers,
   search::{objects::objects_query, queries::Queries, Identifier, IdentifierType},
+  to_input_edit::to_position2,
 };
 
 use tower_lsp::lsp_types::{
-  DidOpenTextDocumentParams, Hover, HoverContents, HoverParams, MarkupContent, MarkupKind,
-  Position, TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, Url,
+  DidOpenTextDocumentParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
+  HoverParams, Location, MarkupContent, MarkupKind, PartialResultParams, Position, Range,
+  TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, Url,
   WorkDoneProgressParams,
 };
 use tree_sitter::Point;
@@ -59,7 +61,7 @@ impl NodejsLspFiles {
   pub fn add_global_context(&self, actions: Option<Vec<String>>) {}
 
   #[napi]
-  pub fn delete_all(&mut self) {
+  pub fn delete_all(&mut self, filename: String) {
     self.lsp_files.variables.clear();
     self.lsp_files.delete_documents();
     self.counter = 0;
@@ -123,7 +125,6 @@ impl NodejsLspFiles {
     &self,
     id: u32,
     filename: String,
-    content: String,
     line: u32,
     mut position: JsPosition,
   ) -> Option<JsHover> {
@@ -140,6 +141,13 @@ impl NodejsLspFiles {
     };
     let hover = self.lsp_files.hover(params)?;
     let mut res = None;
+    let mut range = Range {
+      start: to_position2(hover.0.start),
+      end: to_position2(hover.0.end),
+    };
+    range.start.line += line;
+    range.end.line += line;
+    let range = Some(range);
     if hover.1 {
       let filter = self
         .filters
@@ -153,7 +161,7 @@ impl NodejsLspFiles {
         let hover_contents = HoverContents::Markup(markup_content);
         let hover = Hover {
           contents: hover_contents,
-          range: None,
+          range,
         };
         res = Some(hover);
       }
@@ -165,17 +173,19 @@ impl NodejsLspFiles {
       let hover_contents = HoverContents::Markup(markup_content);
       let hover = Hover {
         contents: hover_contents,
-        range: None,
+        range,
       };
       res = Some(hover);
     }
     if let Some(res) = res {
       if let HoverContents::Markup(hover_contents) = res.contents {
-        return Some(JsHover {
-          kind: "markdown".to_owned(),
-          value: hover_contents.value,
-          range: None,
-        });
+        if let Some(range) = res.range {
+          return Some(JsHover {
+            kind: "markdown".to_owned(),
+            value: hover_contents.value,
+            range: Some(JsRange::from(&range)),
+          });
+        }
       }
     }
     None
@@ -185,7 +195,55 @@ impl NodejsLspFiles {
   pub fn complete(position: JsPosition, id: u32, content: String) {}
 
   #[napi]
-  pub fn goto_definition(&self, position: JsPosition, id: u32) {}
+  pub fn goto_definition(
+    &self,
+    id: u32,
+    filename: String,
+    line: u32,
+    mut position: JsPosition,
+  ) -> Option<Vec<JsLocation>> {
+    position.line -= line;
+    let uri = Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap();
+    let params: GotoDefinitionParams = GotoDefinitionParams {
+      text_document_position_params: TextDocumentPositionParams::new(
+        TextDocumentIdentifier::new(uri.clone()),
+        Position::new(position.line, position.character),
+      ),
+      work_done_progress_params: WorkDoneProgressParams {
+        work_done_token: None,
+      },
+      partial_result_params: PartialResultParams {
+        ..Default::default()
+      },
+    };
+    let defintion = self.lsp_files.goto_definition(params)?;
+    let mut definitions = vec![];
+    println!("here we are, {}", definitions.len());
+    match defintion {
+      GotoDefinitionResponse::Scalar(mut location) => {
+        let uri2 = location.uri.to_string();
+        if uri2.contains(&filename) {
+          location.uri = Url::parse(&filename).unwrap();
+          location.range.start.line += line;
+          location.range.end.line += line;
+          definitions.push(JsLocation::from(&location));
+        }
+      }
+      GotoDefinitionResponse::Array(locations) => {
+        for mut location in locations {
+          let uri2 = location.uri.to_string();
+          if uri2.contains(&filename) {
+            location.uri = Url::parse(&filename).unwrap();
+            location.range.start.line += line;
+            location.range.end.line += line;
+            definitions.push(JsLocation::from(&location));
+          }
+        }
+      }
+      _ => (),
+    }
+    Some(definitions)
+  }
 }
 
 #[napi(object)]
@@ -200,6 +258,15 @@ impl From<Point> for JsPosition {
     Self {
       line: value.row as u32,
       character: value.column as u32,
+    }
+  }
+}
+
+impl From<&Position> for JsPosition {
+  fn from(value: &Position) -> Self {
+    Self {
+      line: value.line,
+      character: value.character,
     }
   }
 }
@@ -261,6 +328,15 @@ impl From<&IdentifierType> for JsIdentifierType {
   }
 }
 
+impl From<&Range> for JsRange {
+  fn from(value: &Range) -> Self {
+    Self {
+      start: JsPosition::from(&value.start),
+      end: JsPosition::from(&value.end),
+    }
+  }
+}
+
 #[napi(object)]
 pub struct JsHover {
   pub kind: String,
@@ -272,4 +348,19 @@ pub struct JsHover {
 pub struct JsRange {
   pub start: JsPosition,
   pub end: JsPosition,
+}
+
+#[napi(object)]
+pub struct JsLocation {
+  pub uri: String,
+  pub range: JsRange,
+}
+
+impl From<&Location> for JsLocation {
+  fn from(value: &Location) -> Self {
+    Self {
+      uri: value.uri.to_string(),
+      range: JsRange::from(&value.range),
+    }
+  }
 }

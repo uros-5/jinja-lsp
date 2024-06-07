@@ -37,14 +37,18 @@ export interface JsRange {
   start: JsPosition
   end: JsPosition
 }
+export interface JsLocation {
+  uri: string
+  range: JsRange
+}
 export class NodejsLspFiles {
   constructor()
   /** Actions can come from unsaved context. */
   addGlobalContext(actions?: Array<string> | undefined | null): void
-  deleteAll(): void
+  deleteAll(filename: string): void
   addOne(id: number, filename: string, content: string, line: number): Array<JsIdentifier>
   getVariables(id: string, line: number): Array<JsIdentifier> | null
-  hover(id: number, filename: string, content: string, line: number, position: JsPosition): JsHover | null
+  hover(id: number, filename: string, line: number, position: JsPosition): JsHover | null
   static complete(position: JsPosition, id: number, content: string): void
-  gotoDefinition(position: JsPosition, id: number): void
+  gotoDefinition(id: number, filename: string, line: number, position: JsPosition): Array<JsLocation> | null
 }

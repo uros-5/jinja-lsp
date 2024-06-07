@@ -720,6 +720,18 @@ impl LspFiles {
     pub fn delete_documents(&mut self) {
         self.documents.clear();
     }
+
+    pub fn delete_documents_with_id(&mut self, id: String) {
+        let mut ids = vec![];
+        for i in &self.documents {
+            if i.0.contains(&id) {
+                ids.push(i.0.clone());
+            }
+        }
+        for i in ids {
+            self.documents.remove(&i);
+        }
+    }
 }
 
 impl Default for LspFiles {

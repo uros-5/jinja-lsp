@@ -47,11 +47,12 @@ pub struct LspFiles {
     pub parsers: Parsers,
     pub queries: Queries,
     pub config: JinjaConfig,
-    pub diagnostics_task: JoinHandle<()>,
+    pub diagnostics_task: Option<JoinHandle<()>>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
     pub variables: HashMap<String, Vec<Identifier>>,
     pub code_actions: HashMap<String, Vec<Identifier>>,
     pub is_vscode: bool,
+    pub ignore_globals: bool,
 }
 
 impl LspFiles {
@@ -184,14 +185,16 @@ impl LspFiles {
             text_document: TextDocumentIdentifier::new(params.text_document.uri),
             text: None,
         };
-        self.diagnostics_task.abort();
+        if let Some(task) = &self.diagnostics_task {
+            task.abort();
+        }
         let channel = self.main_channel.clone();
-        self.diagnostics_task = tokio::spawn(async move {
+        self.diagnostics_task = Some(tokio::spawn(async move {
             sleep(Duration::from_millis(200)).await;
             if let Some(channel) = channel {
                 let _ = channel.send(LspMessage::DidSave(param)).await;
             }
-        });
+        }));
         None
     }
 
@@ -211,6 +214,7 @@ impl LspFiles {
             &name.to_string(),
             self.config.templates.clone(),
             lang_type,
+            self.ignore_globals,
         )
     }
 
@@ -712,6 +716,10 @@ impl LspFiles {
         }
         Some(DocumentSymbolResponse::Nested(symbols))
     }
+
+    pub fn delete_documents(&mut self) {
+        self.documents.clear();
+    }
 }
 
 impl Default for LspFiles {
@@ -719,7 +727,7 @@ impl Default for LspFiles {
         let mut trees = HashMap::new();
         trees.insert(LangType::Template, HashMap::new());
         trees.insert(LangType::Backend, HashMap::new());
-        let diagnostics_task = tokio::spawn(async move {});
+        let diagnostics_task = None;
         let main_channel = None;
         Self {
             trees,
@@ -732,6 +740,35 @@ impl Default for LspFiles {
             variables: HashMap::default(),
             is_vscode: false,
             code_actions: HashMap::default(),
+            ignore_globals: false,
+        }
+    }
+}
+
+impl Clone for LspFiles {
+    fn clone(&self) -> Self {
+        let trees = self.trees.clone();
+        let parsers = Parsers::default();
+        let queries = Queries::default();
+        let documents = self.documents.clone();
+        let main_channel = self.main_channel.clone();
+        let variables = self.variables.clone();
+        let is_vscode = self.is_vscode;
+        let code_actions = self.code_actions.clone();
+        let config = self.config.clone();
+        let task = None;
+        Self {
+            trees,
+            documents,
+            parsers,
+            queries,
+            config,
+            main_channel,
+            variables,
+            code_actions,
+            is_vscode,
+            diagnostics_task: task,
+            ignore_globals: self.ignore_globals,
         }
     }
 }

@@ -310,6 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { sum } = nativeBinding
+const { basic, NodejsLspFiles } = nativeBinding
 
-module.exports.sum = sum
+module.exports.basic = basic
+module.exports.NodejsLspFiles = NodejsLspFiles

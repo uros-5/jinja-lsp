@@ -1,7 +1,10 @@
 [package]
 edition = "2021"
-name = "uros_jinja-lsp-nodejs"
-version = "0.0.0"
+name = "jinja-lsp-nodejs"
+version = "0.1.80"
+license = "MIT"
+authors = ["uros-5"]
+description = "Bindings for jinja-lsp"
 
 [lib]
 crate-type = ["cdylib"]
@@ -10,6 +13,11 @@ crate-type = ["cdylib"]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
 napi = { version = "2.12.2", default-features = false, features = ["napi4"] }
 napi-derive = "2.12.2"
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.80"}
+jinja-lsp = { path = "../jinja-lsp", version = "0.1.80"}
+tree-sitter = "0.21.0"
+tower-lsp = { version = "0.20.0", features = ["proposed"] }
+ropey = "1.5.0"
 
 [build-dependencies]
 napi-build = "2.0.1"
@@ -17,3 +25,4 @@ napi-build = "2.0.1"
 [profile.release]
 lto = true
 strip = "symbols"
+opt-level = 3

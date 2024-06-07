@@ -1,12 +1,20 @@
 #![deny(clippy::all)]
 
-use jinja_lsp::lsp_files::LspFiles;
+use jinja_lsp::{
+  channels::diagnostics::DiagnosticMessage,
+  filter::{init_filter_completions, FilterCompletion},
+  lsp_files::LspFiles,
+};
 use jinja_lsp_queries::{
   parsers::Parsers,
-  search::{objects::objects_query, queries::Queries},
+  search::{objects::objects_query, queries::Queries, Identifier, IdentifierType},
 };
 
-use tower_lsp::lsp_types::{DidOpenTextDocumentParams, Position, TextDocumentItem, Url};
+use tower_lsp::lsp_types::{
+  DidOpenTextDocumentParams, Hover, HoverContents, HoverParams, MarkupContent, MarkupKind,
+  Position, TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, Url,
+  WorkDoneProgressParams,
+};
 use tree_sitter::Point;
 
 #[macro_use]
@@ -32,6 +40,7 @@ pub fn basic(content: String) -> Option<i32> {
 pub struct NodejsLspFiles {
   lsp_files: LspFiles,
   counter: u32,
+  filters: Vec<FilterCompletion>,
 }
 
 #[napi]
@@ -41,6 +50,7 @@ impl NodejsLspFiles {
     Self {
       lsp_files: LspFiles::default(),
       counter: 0,
+      filters: init_filter_completions(),
     }
   }
 
@@ -57,34 +67,119 @@ impl NodejsLspFiles {
   }
 
   #[napi]
-  pub fn add_one(&mut self, id: u32, content: String, line: u32) -> bool {
-    println!("{}", id);
+  pub fn add_one(
+    &mut self,
+    id: u32,
+    filename: String,
+    content: String,
+    line: u32,
+  ) -> Vec<JsIdentifier> {
     let params: DidOpenTextDocumentParams = DidOpenTextDocumentParams {
       text_document: TextDocumentItem::new(
-        Url::parse(&format!("file:///home/{id}.jinja")).unwrap(),
+        Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap(),
         String::new(),
         0,
         content,
       ),
     };
     let content = self.lsp_files.did_open(params);
+    let mut all_errors = vec![];
     if let Some(content) = content {
       match content {
-        jinja_lsp::channels::diagnostics::DiagnosticMessage::Errors(errors) => {
+        DiagnosticMessage::Errors(errors) => {
           for i in errors {
-            println!("error: {}", i.1.len());
+            for error in i.1 {
+              let diagnostic = error.0.to_string();
+              let mut position = error.1;
+              position.start.row += line as usize;
+              position.end.row += line as usize;
+              let mut identifier = JsIdentifier::from(&position);
+              identifier.error = Some(diagnostic);
+              all_errors.push(identifier);
+            }
           }
         }
-        jinja_lsp::channels::diagnostics::DiagnosticMessage::Str(_) => {
-          println!("str")
-        }
+        DiagnosticMessage::Str(_) => {}
       }
     }
-    true
+    all_errors
   }
 
   #[napi]
-  pub fn hover(&self, position: JsPosition, id: u32) {}
+  pub fn get_variables(&self, id: String, line: u32) -> Option<Vec<JsIdentifier>> {
+    let variables = self.lsp_files.variables.get(&id)?;
+    let mut converted = vec![];
+    for variable in variables {
+      let mut variable2 = JsIdentifier::from(variable);
+      variable2.start.line += line;
+      variable2.end.line += line;
+      converted.push(variable2);
+    }
+    Some(converted)
+  }
+
+  #[napi]
+  pub fn hover(
+    &self,
+    id: u32,
+    filename: String,
+    content: String,
+    line: u32,
+    mut position: JsPosition,
+  ) -> Option<JsHover> {
+    position.line -= line;
+    let uri = Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap();
+    let params: HoverParams = HoverParams {
+      text_document_position_params: TextDocumentPositionParams::new(
+        TextDocumentIdentifier::new(uri.clone()),
+        Position::new(position.line, position.character),
+      ),
+      work_done_progress_params: WorkDoneProgressParams {
+        work_done_token: None,
+      },
+    };
+    let hover = self.lsp_files.hover(params)?;
+    let mut res = None;
+    if hover.1 {
+      let filter = self
+        .filters
+        .iter()
+        .find(|name| name.name == hover.0.name && hover.1);
+      if let Some(filter) = filter {
+        let markup_content = MarkupContent {
+          kind: MarkupKind::Markdown,
+          value: filter.desc.to_string(),
+        };
+        let hover_contents = HoverContents::Markup(markup_content);
+        let hover = Hover {
+          contents: hover_contents,
+          range: None,
+        };
+        res = Some(hover);
+      }
+    } else if let Some(data_type) = self.lsp_files.data_type(uri.clone(), hover.0) {
+      let markup_content = MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: data_type.completion_detail().to_owned(),
+      };
+      let hover_contents = HoverContents::Markup(markup_content);
+      let hover = Hover {
+        contents: hover_contents,
+        range: None,
+      };
+      res = Some(hover);
+    }
+    if let Some(res) = res {
+      if let HoverContents::Markup(hover_contents) = res.contents {
+        return Some(JsHover {
+          kind: "markdown".to_owned(),
+          value: hover_contents.value,
+          range: None,
+        });
+      }
+    }
+    None
+  }
 
   #[napi]
   pub fn complete(position: JsPosition, id: u32, content: String) {}
@@ -94,7 +189,87 @@ impl NodejsLspFiles {
 }
 
 #[napi(object)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
 pub struct JsPosition {
   pub line: u32,
   pub character: u32,
+}
+
+impl From<Point> for JsPosition {
+  fn from(value: Point) -> Self {
+    Self {
+      line: value.row as u32,
+      character: value.column as u32,
+    }
+  }
+}
+
+#[napi]
+#[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum JsIdentifierType {
+  ForLoopKey,
+  ForLoopValue,
+  ForLoopCount,
+  SetVariable,
+  WithVariable,
+  MacroName,
+  MacroParameter,
+  TemplateBlock,
+  BackendVariable,
+  #[default]
+  UndefinedVariable,
+  JinjaTemplate,
+}
+
+#[napi(object)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
+pub struct JsIdentifier {
+  pub start: JsPosition,
+  pub end: JsPosition,
+  pub name: String,
+  pub identifier_type: JsIdentifierType,
+  pub error: Option<String>,
+}
+
+impl From<&Identifier> for JsIdentifier {
+  fn from(value: &Identifier) -> Self {
+    Self {
+      start: JsPosition::from(value.start),
+      end: JsPosition::from(value.end),
+      name: value.name.to_string(),
+      identifier_type: JsIdentifierType::from(&value.identifier_type),
+      error: None,
+    }
+  }
+}
+
+impl From<&IdentifierType> for JsIdentifierType {
+  fn from(value: &IdentifierType) -> Self {
+    match value {
+      IdentifierType::ForLoopKey => JsIdentifierType::ForLoopKey,
+      IdentifierType::ForLoopValue => JsIdentifierType::ForLoopValue,
+      IdentifierType::ForLoopCount => JsIdentifierType::ForLoopCount,
+      IdentifierType::SetVariable => JsIdentifierType::SetVariable,
+      IdentifierType::WithVariable => JsIdentifierType::WithVariable,
+      IdentifierType::MacroName => JsIdentifierType::MacroName,
+      IdentifierType::MacroParameter => JsIdentifierType::MacroParameter,
+      IdentifierType::TemplateBlock => JsIdentifierType::TemplateBlock,
+      IdentifierType::BackendVariable => JsIdentifierType::BackendVariable,
+      IdentifierType::UndefinedVariable => JsIdentifierType::UndefinedVariable,
+      IdentifierType::JinjaTemplate => JsIdentifierType::JinjaTemplate,
+    }
+  }
+}
+
+#[napi(object)]
+pub struct JsHover {
+  pub kind: String,
+  pub value: String,
+  pub range: Option<JsRange>,
+}
+
+#[napi(object)]
+pub struct JsRange {
+  pub start: JsPosition,
+  pub end: JsPosition,
 }

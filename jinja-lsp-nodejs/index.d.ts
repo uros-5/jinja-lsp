@@ -8,13 +8,43 @@ export interface JsPosition {
   line: number
   character: number
 }
+export const enum JsIdentifierType {
+  ForLoopKey = 0,
+  ForLoopValue = 1,
+  ForLoopCount = 2,
+  SetVariable = 3,
+  WithVariable = 4,
+  MacroName = 5,
+  MacroParameter = 6,
+  TemplateBlock = 7,
+  BackendVariable = 8,
+  UndefinedVariable = 9,
+  JinjaTemplate = 10
+}
+export interface JsIdentifier {
+  start: JsPosition
+  end: JsPosition
+  name: string
+  identifierType: JsIdentifierType
+  error?: string
+}
+export interface JsHover {
+  kind: string
+  value: string
+  range?: JsRange
+}
+export interface JsRange {
+  start: JsPosition
+  end: JsPosition
+}
 export class NodejsLspFiles {
   constructor()
   /** Actions can come from unsaved context. */
   addGlobalContext(actions?: Array<string> | undefined | null): void
   deleteAll(): void
-  addOne(id: number, content: string, line: number): boolean
-  hover(position: JsPosition, id: number): void
+  addOne(id: number, filename: string, content: string, line: number): Array<JsIdentifier>
+  getVariables(id: string, line: number): Array<JsIdentifier> | null
+  hover(id: number, filename: string, content: string, line: number, position: JsPosition): JsHover | null
   static complete(position: JsPosition, id: number, content: string): void
   gotoDefinition(position: JsPosition, id: number): void
 }

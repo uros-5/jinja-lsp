@@ -310,7 +310,8 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { basic, NodejsLspFiles } = nativeBinding
+const { basic, NodejsLspFiles, JsIdentifierType } = nativeBinding
 
 module.exports.basic = basic
 module.exports.NodejsLspFiles = NodejsLspFiles
+module.exports.JsIdentifierType = JsIdentifierType

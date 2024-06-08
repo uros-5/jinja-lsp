@@ -67,12 +67,24 @@ impl NodejsLspFiles {
 
   /// Actions can come from unsaved context.
   #[napi]
-  pub fn add_global_context(&self, actions: Option<Vec<String>>) {}
+  pub fn add_global_context(&mut self, uri: String, actions: Option<Vec<String>>) {
+    if let Some(actions) = actions {
+      let mut identifiers = vec![];
+      for action in actions {
+        let mut identifier = action.split('.');
+        if let Some(identifier) = identifier.next() {
+          let mut identifier = Identifier::new(identifier, Point::new(0, 0), Point::new(0, 0));
+          identifier.identifier_type = IdentifierType::BackendVariable;
+          identifiers.push(identifier);
+        }
+      }
+      self.lsp_files.variables.insert(uri, identifiers);
+    }
+  }
 
   #[napi]
   pub fn delete_all(&mut self, filename: String) {
-    self.lsp_files.variables.clear();
-    self.lsp_files.delete_documents();
+    self.lsp_files.delete_documents_with_id(filename);
     self.counter = 0;
     // self.lsp_files.main_channel
   }
@@ -350,10 +362,12 @@ impl NodejsLspFiles {
         for mut location in locations {
           let uri2 = location.uri.to_string();
           if uri2.contains(&filename) {
-            location.uri = Url::parse(&filename).unwrap();
+            location.uri = Url::parse(&uri2).unwrap();
             location.range.start.line += line;
             location.range.end.line += line;
-            definitions.push(JsLocation::from(&location));
+            let mut js_location = JsLocation::from(&location);
+            js_location.is_backend = true;
+            definitions.push(js_location);
           }
         }
       }
@@ -473,6 +487,8 @@ pub struct JsRange {
 pub struct JsLocation {
   pub uri: String,
   pub range: JsRange,
+  pub is_backend: bool,
+  pub name: String,
 }
 
 impl From<&Location> for JsLocation {
@@ -480,6 +496,8 @@ impl From<&Location> for JsLocation {
     Self {
       uri: value.uri.to_string(),
       range: JsRange::from(&value.range),
+      is_backend: false,
+      name: String::new(),
     }
   }
 }

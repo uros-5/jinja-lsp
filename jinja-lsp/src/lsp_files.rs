@@ -424,7 +424,15 @@ impl LspFiles {
                         }
                         let variables = file.1.iter().filter(|item| item.name == current_ident);
                         for variable in variables {
-                            let uri = Url::parse(file.0).unwrap();
+                            let uri = {
+                                if variable.start == Point::new(0, 0)
+                                    && variable.end == Point::new(0, 0)
+                                {
+                                    Url::parse(&format!("{}-{}", &file.0, &variable.name)).unwrap()
+                                } else {
+                                    Url::parse(file.0).unwrap()
+                                }
+                            };
                             let start = to_position2(variable.start);
                             let end = to_position2(variable.end);
                             let range = Range::new(start, end);
@@ -745,6 +753,7 @@ impl LspFiles {
         }
         for i in ids {
             self.documents.remove(&i);
+            self.variables.remove(&i);
         }
     }
 }

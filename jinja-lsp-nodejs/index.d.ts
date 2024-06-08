@@ -42,6 +42,8 @@ export interface JsRange {
 export interface JsLocation {
   uri: string
   range: JsRange
+  isBackend: boolean
+  name: string
 }
 export interface JsCompletionItem {
   completionType: JsCompletionType
@@ -69,7 +71,7 @@ export const enum JsCompletionType {
 export class NodejsLspFiles {
   constructor()
   /** Actions can come from unsaved context. */
-  addGlobalContext(actions?: Array<string> | undefined | null): void
+  addGlobalContext(uri: string, actions?: Array<string> | undefined | null): void
   deleteAll(filename: string): void
   addOne(id: number, filename: string, content: string, line: number): Array<JsIdentifier>
   getVariables(id: string, line: number): Array<JsIdentifier> | null

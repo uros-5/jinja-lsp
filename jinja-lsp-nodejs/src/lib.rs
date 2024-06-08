@@ -156,6 +156,7 @@ impl NodejsLspFiles {
     };
     range.start.line += line;
     range.end.line += line;
+    let identifier_name = hover.0.name.to_owned();
     let range = Some(range);
     if hover.1 {
       let filter = self
@@ -175,9 +176,11 @@ impl NodejsLspFiles {
         res = Some(hover);
       }
     } else if let Some(data_type) = self.lsp_files.data_type(uri.clone(), hover.0) {
+      let value = data_type.completion_detail().to_owned();
+      let value = format!("{value}\n\n---\n**{}**", identifier_name);
       let markup_content = MarkupContent {
         kind: MarkupKind::Markdown,
-        value: data_type.completion_detail().to_owned(),
+        value,
       };
       let hover_contents = HoverContents::Markup(markup_content);
       let hover = Hover {
@@ -289,6 +292,21 @@ impl NodejsLspFiles {
         // if !filtered.is_empty() {
         //   items = Some(CompletionResponse::Array(filtered));
         // }
+      }
+      CompletionType::IncompleteIdentifier { name, mut range } => {
+        range.start.line += line;
+        range.end.line += line;
+        let variable = self.lsp_files.get_variable(name, uri.to_string())?;
+        let ret = vec![JsCompletionItem {
+          completion_type: JsCompletionType::Identifier,
+          label: variable.to_string(),
+          kind: Kind2::VARIABLE,
+          description: variable.to_string(),
+          new_text: Some(variable),
+          insert: Some(JsRange::from(&range)),
+          replace: Some(JsRange::from(&range)),
+        }];
+        items = Some(ret);
       }
     };
     items

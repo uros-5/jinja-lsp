@@ -43,7 +43,7 @@ pub fn completion_start(trigger_point: Point, identifier: &Identifier) -> Option
     let len = identifier.name.len();
     let diff = identifier.end.column - trigger_point.column;
     if diff == 0 || diff == 1 {
-        return Some("");
+        return Some(&identifier.name);
     }
     if diff > len {
         return None;

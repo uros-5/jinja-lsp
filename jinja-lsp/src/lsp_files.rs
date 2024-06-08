@@ -622,7 +622,12 @@ impl LspFiles {
         Some(items)
     }
 
-    pub fn read_templates(&self, mut prefix: String, range: Range) -> Option<Vec<CompletionItem>> {
+    pub fn read_templates(
+        &self,
+        mut prefix: String,
+        range: Range,
+        _: Option<String>,
+    ) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
         if prefix.is_empty() {
             prefix = String::from("file:///");
@@ -661,6 +666,16 @@ impl LspFiles {
         }
 
         Some(abc)
+    }
+
+    pub fn get_variable(&self, prefix: String, id: String) -> Option<String> {
+        let variables = self.variables.get(&id)?;
+        for variable in variables {
+            if variable.name.contains(&prefix) {
+                return Some(variable.name.to_string());
+            }
+        }
+        None
     }
 
     pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {

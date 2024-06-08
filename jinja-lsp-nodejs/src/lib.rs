@@ -7,14 +7,21 @@ use jinja_lsp::{
 };
 use jinja_lsp_queries::{
   parsers::Parsers,
-  search::{objects::objects_query, queries::Queries, Identifier, IdentifierType},
+  search::{
+    objects::{objects_query, CompletionType},
+    queries::Queries,
+    snippets_completion::snippets,
+    Identifier, IdentifierType,
+  },
   to_input_edit::to_position2,
 };
 
 use tower_lsp::lsp_types::{
-  DidOpenTextDocumentParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
-  HoverParams, Location, MarkupContent, MarkupKind, PartialResultParams, Position, Range,
-  TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, Url,
+  CompletionContext, CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse,
+  CompletionTextEdit, CompletionTriggerKind, DidOpenTextDocumentParams, Documentation,
+  GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+  InsertReplaceEdit, Location, MarkupContent, MarkupKind, PartialResultParams, Position, Range,
+  TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, TextEdit, Url,
   WorkDoneProgressParams,
 };
 use tree_sitter::Point;
@@ -43,6 +50,7 @@ pub struct NodejsLspFiles {
   lsp_files: LspFiles,
   counter: u32,
   filters: Vec<FilterCompletion>,
+  snippets: Vec<CompletionItem>,
 }
 
 #[napi]
@@ -53,6 +61,7 @@ impl NodejsLspFiles {
       lsp_files: LspFiles::default(),
       counter: 0,
       filters: init_filter_completions(),
+      snippets: snippets(),
     }
   }
 
@@ -184,6 +193,8 @@ impl NodejsLspFiles {
             kind: "markdown".to_owned(),
             value: hover_contents.value,
             range: Some(JsRange::from(&range)),
+            label: None,
+            documentaion: None,
           });
         }
       }
@@ -192,7 +203,96 @@ impl NodejsLspFiles {
   }
 
   #[napi]
-  pub fn complete(position: JsPosition, id: u32, content: String) {}
+  pub fn complete(
+    &self,
+    id: u32,
+    filename: String,
+    line: u32,
+    mut position: JsPosition,
+  ) -> Option<Vec<JsCompletionItem>> {
+    position.line -= line;
+    let uri = Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap();
+    let position = Position::new(position.line, position.character);
+    let params: CompletionParams = CompletionParams {
+      text_document_position: TextDocumentPositionParams::new(
+        TextDocumentIdentifier::new(uri.clone()),
+        Position::new(position.line, position.character),
+      ),
+      work_done_progress_params: WorkDoneProgressParams {
+        work_done_token: None,
+      },
+      partial_result_params: PartialResultParams {
+        ..Default::default()
+      },
+      context: Some(CompletionContext {
+        trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+        trigger_character: None,
+      }),
+    };
+    let completion = self.lsp_files.completion(params)?;
+    let mut items = None;
+
+    match completion {
+      CompletionType::Filter => {
+        let completions = self.filters.clone();
+        let mut ret = Vec::with_capacity(completions.len());
+        for item in completions.into_iter() {
+          ret.push(JsCompletionItem {
+            completion_type: JsCompletionType::Filter,
+            label: item.name,
+            kind: Kind2::FIELD,
+            description: item.desc.to_string(),
+            new_text: None,
+            insert: None,
+            replace: None,
+          });
+        }
+        items = Some(ret);
+      }
+      CompletionType::Identifier => {
+        if let Some(variables) = self.lsp_files.read_variables(&uri, position) {
+          let mut ret = vec![];
+          for item in variables {
+            ret.push(JsCompletionItem {
+              completion_type: JsCompletionType::Identifier,
+              label: item.label,
+              kind: Kind2::VARIABLE,
+              description: item.detail.unwrap_or(String::new()),
+              new_text: None,
+              insert: None,
+              replace: None,
+            });
+          }
+          items = Some(ret);
+        }
+      }
+      CompletionType::IncludedTemplate { .. } => {}
+      CompletionType::Snippets { .. } => {
+        // let mut filtered = vec![];
+        // for snippet in self.snippets.iter() {
+        //   let mut snippet = snippet.clone();
+        //   if let Some(CompletionTextEdit::Edit(TextEdit { new_text, .. })) = snippet.text_edit {
+        //   if !self.lsp_files.is_vscode {
+        //     snippet.text_edit = Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+        //       new_text,
+        //       insert: range,
+        //       replace: range,
+        //     }));
+        //   } else {
+        //     snippet.text_edit = None;
+        //   }
+        // }
+        // filtered.push(snippet);
+        //   }
+        // }
+
+        // if !filtered.is_empty() {
+        //   items = Some(CompletionResponse::Array(filtered));
+        // }
+      }
+    };
+    items
+  }
 
   #[napi]
   pub fn goto_definition(
@@ -218,7 +318,6 @@ impl NodejsLspFiles {
     };
     let defintion = self.lsp_files.goto_definition(params)?;
     let mut definitions = vec![];
-    println!("here we are, {}", definitions.len());
     match defintion {
       GotoDefinitionResponse::Scalar(mut location) => {
         let uri2 = location.uri.to_string();
@@ -342,6 +441,8 @@ pub struct JsHover {
   pub kind: String,
   pub value: String,
   pub range: Option<JsRange>,
+  pub label: Option<String>,
+  pub documentaion: Option<String>,
 }
 
 #[napi(object)]
@@ -361,6 +462,55 @@ impl From<&Location> for JsLocation {
     Self {
       uri: value.uri.to_string(),
       range: JsRange::from(&value.range),
+    }
+  }
+}
+
+#[napi(object)]
+pub struct JsCompletionItem {
+  pub completion_type: JsCompletionType,
+  pub label: String,
+  pub kind: Kind2,
+  pub description: String,
+  pub new_text: Option<String>,
+  pub insert: Option<JsRange>,
+  pub replace: Option<JsRange>,
+}
+
+#[napi]
+pub enum Kind2 {
+  VARIABLE,
+  FIELD,
+  FUNCTION,
+  MODULE,
+  CONSTANT,
+  FILE,
+  TEXT,
+}
+
+#[napi]
+pub enum JsCompletionType {
+  Filter,
+  Identifier,
+  Snippets,
+}
+
+impl From<CompletionItemKind> for Kind2 {
+  fn from(value: CompletionItemKind) -> Self {
+    if value == CompletionItemKind::VARIABLE {
+      Kind2::VARIABLE
+    } else if value == CompletionItemKind::FIELD {
+      return Kind2::FIELD;
+    } else if value == CompletionItemKind::FUNCTION {
+      return Kind2::FUNCTION;
+    } else if value == CompletionItemKind::MODULE {
+      return Kind2::MODULE;
+    } else if value == CompletionItemKind::CONSTANT {
+      return Kind2::CONSTANT;
+    } else if value == CompletionItemKind::FILE {
+      return Kind2::FILE;
+    } else {
+      return Kind2::VARIABLE;
     }
   }
 }

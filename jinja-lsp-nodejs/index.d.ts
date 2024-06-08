@@ -32,6 +32,8 @@ export interface JsHover {
   kind: string
   value: string
   range?: JsRange
+  label?: string
+  documentaion?: string
 }
 export interface JsRange {
   start: JsPosition
@@ -41,6 +43,29 @@ export interface JsLocation {
   uri: string
   range: JsRange
 }
+export interface JsCompletionItem {
+  completionType: JsCompletionType
+  label: string
+  kind: Kind2
+  description: string
+  newText?: string
+  insert?: JsRange
+  replace?: JsRange
+}
+export const enum Kind2 {
+  VARIABLE = 0,
+  FIELD = 1,
+  FUNCTION = 2,
+  MODULE = 3,
+  CONSTANT = 4,
+  FILE = 5,
+  TEXT = 6
+}
+export const enum JsCompletionType {
+  Filter = 0,
+  Identifier = 1,
+  Snippets = 2
+}
 export class NodejsLspFiles {
   constructor()
   /** Actions can come from unsaved context. */
@@ -49,6 +74,6 @@ export class NodejsLspFiles {
   addOne(id: number, filename: string, content: string, line: number): Array<JsIdentifier>
   getVariables(id: string, line: number): Array<JsIdentifier> | null
   hover(id: number, filename: string, line: number, position: JsPosition): JsHover | null
-  static complete(position: JsPosition, id: number, content: string): void
+  complete(id: number, filename: string, line: number, position: JsPosition): Array<JsCompletionItem> | null
   gotoDefinition(id: number, filename: string, line: number, position: JsPosition): Array<JsLocation> | null
 }

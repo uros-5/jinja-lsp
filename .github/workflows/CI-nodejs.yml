@@ -190,6 +190,7 @@ jobs:
     #       name: bindings-freebsd
     #       path: jinja-lsp-nodejs/${{ env.APP_NAME }}.*.node
     #       if-no-files-found: error
+
   test-macOS-windows-binding:
     defaults:
       run:

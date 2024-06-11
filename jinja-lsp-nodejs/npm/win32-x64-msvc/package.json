@@ -1,15 +1,15 @@
 {
-  "name": "@jinja-lsp/functions-win32-arm64-msvc",
+  "name": "@jinja-lsp/functions-win32-x64-msvc",
   "version": "0.0.4",
   "os": [
     "win32"
   ],
   "cpu": [
-    "arm64"
+    "x64"
   ],
-  "main": "functions.win32-arm64-msvc.node",
+  "main": "functions.win32-x64-msvc",
   "files": [
-    "functions.win32-arm64-msvc.node"
+    "functions.win32-x64-msvc"
   ],
   "description": "Bindings for jinja-lsp",
   "license": "MIT",

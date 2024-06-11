@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-gnu-linux",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "os": [
     "gnu",
     "linux"

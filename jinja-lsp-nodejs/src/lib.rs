@@ -1,14 +1,15 @@
 #![deny(clippy::all)]
 
+use std::collections::HashMap;
+
 use jinja_lsp::{
-  channels::diagnostics::DiagnosticMessage,
   filter::{init_filter_completions, FilterCompletion},
   lsp_files::LspFiles,
 };
 use jinja_lsp_queries::{
   parsers::Parsers,
   search::{
-    objects::{objects_query, CompletionType},
+    objects::{objects_query, CompletionType, JinjaObject},
     queries::Queries,
     snippets_completion::snippets,
     Identifier, IdentifierType,
@@ -17,11 +18,10 @@ use jinja_lsp_queries::{
 };
 
 use tower_lsp::lsp_types::{
-  CompletionContext, CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse,
-  CompletionTextEdit, CompletionTriggerKind, DidOpenTextDocumentParams, Documentation,
-  GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-  InsertReplaceEdit, Location, MarkupContent, MarkupKind, PartialResultParams, Position, Range,
-  TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, TextEdit, Url,
+  CompletionContext, CompletionItem, CompletionItemKind, CompletionParams, CompletionTriggerKind,
+  DidOpenTextDocumentParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
+  HoverParams, Location, MarkupContent, MarkupKind, PartialResultParams, Position, Range,
+  TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams, Url,
   WorkDoneProgressParams,
 };
 use tree_sitter::Point;
@@ -50,7 +50,9 @@ pub struct NodejsLspFiles {
   lsp_files: LspFiles,
   counter: u32,
   filters: Vec<FilterCompletion>,
-  snippets: Vec<CompletionItem>,
+  _snippets: Vec<CompletionItem>,
+  actions: HashMap<String, Vec<Action>>,
+  action_objects: HashMap<String, Vec<ActionObject>>,
 }
 
 #[napi]
@@ -61,23 +63,27 @@ impl NodejsLspFiles {
       lsp_files: LspFiles::default(),
       counter: 0,
       filters: init_filter_completions(),
-      snippets: snippets(),
+      _snippets: snippets(),
+      actions: HashMap::new(),
+      action_objects: HashMap::new(),
     }
   }
 
   /// Actions can come from unsaved context.
   #[napi]
-  pub fn add_global_context(&mut self, uri: String, actions: Option<Vec<String>>) {
+  pub fn add_global_context(&mut self, uri: String, actions: Option<Vec<Action>>) {
     if let Some(actions) = actions {
       let mut identifiers = vec![];
-      for action in actions {
-        let mut identifier = action.split('.');
-        if let Some(identifier) = identifier.next() {
-          let mut identifier = Identifier::new(identifier, Point::new(0, 0), Point::new(0, 0));
-          identifier.identifier_type = IdentifierType::BackendVariable;
-          identifiers.push(identifier);
-        }
+      let mut action_objects = vec![];
+      for action in &actions {
+        let mut identifier = Identifier::new(&action.name, Point::new(0, 0), Point::new(0, 0));
+        identifier.identifier_type = IdentifierType::BackendVariable;
+        identifiers.push(identifier);
+        let action = ActionObject::from(action);
+        action_objects.push(action);
       }
+      self.actions.insert(uri.to_string(), actions);
+      self.action_objects.insert(uri.to_string(), action_objects);
       self.lsp_files.variables.insert(uri, identifiers);
     }
   }
@@ -97,6 +103,7 @@ impl NodejsLspFiles {
     content: String,
     line: u32,
   ) -> Vec<JsIdentifier> {
+    let mut all_identifiers = vec![];
     let params: DidOpenTextDocumentParams = DidOpenTextDocumentParams {
       text_document: TextDocumentItem::new(
         Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap(),
@@ -105,27 +112,55 @@ impl NodejsLspFiles {
         content,
       ),
     };
-    let content = self.lsp_files.did_open(params);
-    let mut all_errors = vec![];
-    if let Some(content) = content {
-      match content {
-        DiagnosticMessage::Errors(errors) => {
-          for i in errors {
-            for error in i.1 {
-              let diagnostic = error.0.to_string();
-              let mut position = error.1;
-              position.start.row += line as usize;
-              position.end.row += line as usize;
-              let mut identifier = JsIdentifier::from(&position);
-              identifier.error = Some(diagnostic);
-              all_errors.push(identifier);
+    self.lsp_files.did_open(params);
+    let objects = self
+      .lsp_files
+      .read_objects(Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap());
+    if let Some(objects) = objects {
+      if let Some(global_actions) = self.action_objects.get(&filename.to_string()) {
+        for obj in &objects {
+          let action_object = ActionObject::from(obj);
+          for global_action in global_actions {
+            if global_action.compare(&action_object.fields) {
+              let mut start = JsPosition::from(obj.location.0);
+              let mut end = JsPosition::from(obj.last_field_end());
+              start.line += line;
+              end.line += line;
+              let identifier = JsIdentifier {
+                start,
+                end,
+                name: obj.name.to_owned(),
+                identifier_type: JsIdentifierType::Link,
+                error: None,
+              };
+              all_identifiers.push(identifier);
             }
           }
         }
-        DiagnosticMessage::Str(_) => {}
       }
     }
-    all_errors
+    // let query = &self.lsp_files.queries.jinja_objects;
+    // let objects = objects_query(query, &tree, Point::new(0, 0), &content, true);
+    // let objects = objects.show();
+    // if let Some(content) = content {
+    //   match content {
+    //     DiagnosticMessage::Errors(errors) => {
+    //       for i in errors {
+    //         for error in i.1 {
+    //           let diagnostic = error.0.to_string();
+    //           let mut position = error.1;
+    //           position.start.row += line as usize;
+    //           position.end.row += line as usize;
+    //           let mut identifier = JsIdentifier::from(&position);
+    //           identifier.error = Some(diagnostic);
+    //           all_errors.push(identifier);
+    //         }
+    //       }
+    //     }
+    //     DiagnosticMessage::Str(_) => {}
+    //   }
+    // }
+    all_identifiers
   }
 
   #[napi]
@@ -168,8 +203,8 @@ impl NodejsLspFiles {
     };
     range.start.line += line;
     range.end.line += line;
-    let identifier_name = hover.0.name.to_owned();
     let range = Some(range);
+    let full_name = hover.0.name.to_owned();
     if hover.1 {
       let filter = self
         .filters
@@ -189,10 +224,20 @@ impl NodejsLspFiles {
       }
     } else if let Some(data_type) = self.lsp_files.data_type(uri.clone(), hover.0) {
       let value = data_type.completion_detail().to_owned();
-      let value = format!("{value}\n\n---\n**{}**", identifier_name);
+      let value = format!("{value}\n\n---\n**{}**", &full_name);
+      let actions = vec![];
+      let actions = self.actions.get(&filename).unwrap_or(&actions);
+      let action = Action {
+        name: full_name.to_owned(),
+        description: value.to_owned(),
+      };
+      let value = actions
+        .iter()
+        .find(|item| item.name.starts_with(&full_name))
+        .unwrap_or(&action);
       let markup_content = MarkupContent {
         kind: MarkupKind::Markdown,
-        value,
+        value: value.description.to_owned(),
       };
       let hover_contents = HoverContents::Markup(markup_content);
       let hover = Hover {
@@ -360,6 +405,7 @@ impl NodejsLspFiles {
       }
       GotoDefinitionResponse::Array(locations) => {
         for mut location in locations {
+          print!("{}", location.uri);
           let uri2 = location.uri.to_string();
           if uri2.contains(&filename) {
             location.uri = Url::parse(&uri2).unwrap();
@@ -417,6 +463,7 @@ pub enum JsIdentifierType {
   #[default]
   UndefinedVariable,
   JinjaTemplate,
+  Link,
 }
 
 #[napi(object)]
@@ -548,5 +595,44 @@ impl From<CompletionItemKind> for Kind2 {
     } else {
       return Kind2::VARIABLE;
     }
+  }
+}
+
+#[napi(object)]
+pub struct Action {
+  pub name: String,
+  pub description: String,
+}
+
+pub struct ActionObject {
+  pub fields: Vec<String>,
+}
+
+impl From<&Action> for ActionObject {
+  fn from(value: &Action) -> Self {
+    let parts = value.name.split('.');
+    let mut fields = vec![];
+    for part in parts {
+      fields.push(part.to_owned());
+    }
+    Self { fields }
+  }
+}
+
+impl From<&JinjaObject> for ActionObject {
+  fn from(value: &JinjaObject) -> Self {
+    let mut fields = vec![];
+    fields.push(value.name.to_owned());
+    for field in &value.fields {
+      fields.push(field.0.to_owned());
+    }
+    Self { fields }
+  }
+}
+
+impl ActionObject {
+  pub fn compare(&self, fields: &Vec<String>) -> bool {
+    &self.fields == fields
+    // self.fields == fields
   }
 }

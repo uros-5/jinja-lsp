@@ -1,10 +1,15 @@
 use jinja_lsp_queries::{
     lsp_helper::{path_items, search_errors},
     search::{
-        completion_start, definition::definition_query, objects::objects_query, queries::Queries,
+        completion_start,
+        definition::definition_query,
+        objects::{objects_query, JinjaObject},
+        queries::Queries,
         rust_identifiers::backend_definition_query,
-        rust_template_completion::backend_templates_query, snippets_completion::snippets_query,
-        templates::templates_query, to_range, Identifier, IdentifierType,
+        rust_template_completion::backend_templates_query,
+        snippets_completion::snippets_query,
+        templates::templates_query,
+        to_range, Identifier, IdentifierType,
     },
     tree_builder::{JinjaDiagnostic, LangType},
 };
@@ -422,7 +427,9 @@ impl LspFiles {
                         if file.0 == &uri {
                             continue;
                         }
-                        let variables = file.1.iter().filter(|item| item.name == current_ident);
+                        let variables = file.1.iter().filter(|item| {
+                            item.name.split('.').next().unwrap_or(&item.name) == current_ident
+                        });
                         for variable in variables {
                             let uri = {
                                 if variable.start == Point::new(0, 0)
@@ -702,6 +709,25 @@ impl LspFiles {
         Some(msg)
     }
 
+    pub fn read_objects(&self, uri: Url) -> Option<Vec<JinjaObject>> {
+        let rope = self.documents.get(uri.as_str())?;
+        let mut writter = FileContent::default();
+        let _ = rope.write_to(&mut writter);
+        let content = writter.content;
+        let lang_type = self.config.file_ext(&Path::new(uri.as_str()))?;
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(uri.as_str())?;
+        let objects = objects_query(
+            &self.queries.jinja_objects,
+            tree,
+            Point::new(0, 0),
+            &content,
+            true,
+        );
+        let objects = objects.show();
+        Some(objects)
+    }
+
     pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {
         let this_file = self.variables.get(uri.as_str())?;
         let this_file = this_file
@@ -713,8 +739,23 @@ impl LspFiles {
                 let same_name = hover.name == variable.name;
                 bigger && in_scope && same_name
             })
-            .max()?;
-        Some(this_file.identifier_type.clone())
+            .max();
+        if let Some(this_file) = this_file {
+            return Some(this_file.identifier_type.clone());
+        }
+        for file in &self.variables {
+            if file.0 == &uri.to_string() {
+                continue;
+            }
+            let variables = file
+                .1
+                .iter()
+                .filter(|item| item.name.split('.').next().unwrap_or(&item.name) == hover.name);
+            if variables.count() > 0 {
+                return Some(IdentifierType::BackendVariable);
+            }
+        }
+        None
     }
 
     pub fn document_symbols(

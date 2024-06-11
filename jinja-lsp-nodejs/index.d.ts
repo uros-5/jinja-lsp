@@ -19,7 +19,8 @@ export const enum JsIdentifierType {
   TemplateBlock = 7,
   BackendVariable = 8,
   UndefinedVariable = 9,
-  JinjaTemplate = 10
+  JinjaTemplate = 10,
+  Link = 11
 }
 export interface JsIdentifier {
   start: JsPosition
@@ -68,10 +69,14 @@ export const enum JsCompletionType {
   Identifier = 1,
   Snippets = 2
 }
+export interface Action {
+  name: string
+  description: string
+}
 export class NodejsLspFiles {
   constructor()
   /** Actions can come from unsaved context. */
-  addGlobalContext(uri: string, actions?: Array<string> | undefined | null): void
+  addGlobalContext(uri: string, actions?: Array<Action> | undefined | null): void
   deleteAll(filename: string): void
   addOne(id: number, filename: string, content: string, line: number): Array<JsIdentifier>
   getVariables(id: string, line: number): Array<JsIdentifier> | null

@@ -216,7 +216,7 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(filtered));
                                 }
                             }
-                            CompletionType::IncompleteIdentifier { name, range } => {}
+                            CompletionType::IncompleteIdentifier { .. } => {}
                         };
                     }
                     let _ = sender.send(items);

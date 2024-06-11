@@ -8,7 +8,7 @@ pub struct JinjaObject {
     pub name: String,
     pub location: (Point, Point),
     pub is_filter: bool,
-    fields: Vec<(String, (Point, Point))>,
+    pub fields: Vec<(String, (Point, Point))>,
 }
 
 impl JinjaObject {
@@ -23,6 +23,11 @@ impl JinjaObject {
 
     pub fn add_field(&mut self, field: String, start: Point, end: Point) {
         self.fields.push((field, (start, end)));
+    }
+
+    pub fn last_field_end(&self) -> Point {
+        let last = self.fields.last().map_or(self.location.1, |v| v.1 .1);
+        last
     }
 }
 

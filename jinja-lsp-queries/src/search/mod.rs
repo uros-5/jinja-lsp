@@ -5,6 +5,7 @@ use self::objects::JinjaObject;
 
 pub mod definition;
 pub mod objects;
+mod python_identifiers;
 pub mod queries;
 pub mod rust_identifiers;
 pub mod rust_template_completion;
@@ -19,6 +20,7 @@ pub struct Identifier {
     pub name: String,
     pub scope_ends: (usize, Point),
     pub identifier_type: IdentifierType,
+    pub fields: Vec<(String, (Point, Point))>,
 }
 
 impl Identifier {
@@ -29,13 +31,25 @@ impl Identifier {
             end,
             scope_ends: (0, Point::default()),
             identifier_type: IdentifierType::UndefinedVariable,
+            fields: Vec::new(),
         }
+    }
+
+    pub fn merge(&self) -> String {
+        let mut merged = self.name.to_string();
+        for field in &self.fields {
+            merged.push('.');
+            merged.push_str(&field.0);
+        }
+        merged
     }
 }
 
 impl From<&JinjaObject> for Identifier {
     fn from(value: &JinjaObject) -> Self {
-        Identifier::new(&value.name, value.location.0, value.location.1)
+        let mut identifier = Identifier::new(&value.name, value.location.0, value.location.1);
+        identifier.fields.clone_from(&value.fields);
+        identifier
     }
 }
 

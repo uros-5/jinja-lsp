@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod query_tests {
-    use crate::search::{objects::objects_query, snippets_completion::snippets_query, to_range};
+    use crate::search::{
+        objects::objects_query, python_identifiers::_python_identifiers,
+        snippets_completion::snippets_query, to_range,
+    };
     use tree_sitter::{Parser, Point};
 
     use crate::{
@@ -382,6 +385,21 @@ mod query_tests {
             let tree = prepare_jinja_tree(case.0);
             let snippets = snippets_query(&query, &tree, case.1, case.0, false);
             assert_eq!(snippets.is_error, case.2);
+        }
+    }
+
+    #[test]
+    fn test_python_identifiers() {
+        let cases = [r#"
+            [page.text
+                 for page in retrieval.result.abc]
+             "#];
+
+        let query = Queries::default();
+        let query = query.python_identifiers;
+        for _case in cases {
+            let tree = prepare_python_tree(cases[0]);
+            _python_identifiers(&query, &tree, Point::new(0, 0), cases[0], true);
         }
     }
 }

@@ -1,7 +1,7 @@
 import test from 'ava'
 
-import { sum } from '../index.js'
+import { NodejsLspFiles } from '../index.js'
 
-test('sum from native', (t) => {
-  t.is(sum(1, 2), 3)
+test('main class', (t) => {
+  t.is(new NodejsLspFiles().getVariables("id", 11), null);
 })

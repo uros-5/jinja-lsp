@@ -11,6 +11,7 @@ use crate::{
     tree_builder::{JinjaDiagnostic, LangType},
 };
 
+#[allow(clippy::too_many_arguments)]
 pub fn search_errors(
     root: &Tree,
     source: &str,
@@ -19,6 +20,7 @@ pub fn search_errors(
     file_name: &String,
     templates: PathBuf,
     lang_type: LangType,
+    ignore_globals: bool,
 ) -> Option<Vec<(JinjaDiagnostic, Identifier)>> {
     let mut diagnostics = vec![];
     match lang_type {
@@ -57,15 +59,17 @@ pub fn search_errors(
                     to_warn = true;
                 } else if empty {
                     to_warn = true;
-                    for file in variables {
-                        let temp = file
-                            .1
-                            .iter()
-                            .filter(|variable| variable.name == object.name);
-                        if temp.count() != 0 {
-                            err_type = JinjaDiagnostic::DefinedSomewhere;
-                            to_warn = true;
-                            break;
+                    if !ignore_globals {
+                        for file in variables {
+                            let temp = file
+                                .1
+                                .iter()
+                                .filter(|variable| variable.name == object.name);
+                            if temp.count() != 0 {
+                                err_type = JinjaDiagnostic::DefinedSomewhere;
+                                to_warn = true;
+                                break;
+                            }
                         }
                     }
                 }

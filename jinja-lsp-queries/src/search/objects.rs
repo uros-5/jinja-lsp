@@ -1,12 +1,14 @@
 use tower_lsp::lsp_types::Range;
 use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 
+use super::{completion_start, to_range, Identifier};
+
 #[derive(Default, Debug, Clone)]
 pub struct JinjaObject {
     pub name: String,
     pub location: (Point, Point),
     pub is_filter: bool,
-    fields: Vec<(String, (Point, Point))>,
+    pub fields: Vec<(String, (Point, Point))>,
 }
 
 impl JinjaObject {
@@ -21,6 +23,11 @@ impl JinjaObject {
 
     pub fn add_field(&mut self, field: String, start: Point, end: Point) {
         self.fields.push((field, (start, end)));
+    }
+
+    pub fn last_field_end(&self) -> Point {
+        let last = self.fields.last().map_or(self.location.1, |v| v.1 .1);
+        last
     }
 }
 
@@ -104,7 +111,22 @@ impl JinjaObjects {
     pub fn completion(&self, trigger_point: Point) -> Option<CompletionType> {
         if self.in_pipe(trigger_point) {
             return Some(CompletionType::Filter);
-        } else if self.in_expr(trigger_point) {
+        }
+        if self.in_expr(trigger_point) {
+            if trigger_point > self.ident.1 {
+                return Some(CompletionType::Identifier);
+            }
+            if let Some(ident_value) = self.is_ident(trigger_point) {
+                // if let Some(ident2) = self.objects.last().map(|last| last) {
+                let identifier = Identifier::new(&ident_value, self.ident.0, self.ident.1);
+                let start = completion_start(trigger_point, &identifier);
+                let range = to_range((self.ident.0, self.ident.1));
+                return Some(CompletionType::IncompleteIdentifier {
+                    name: start?.to_string(),
+                    range,
+                });
+                // }
+            }
             return Some(CompletionType::Identifier);
         }
         None
@@ -115,7 +137,7 @@ impl JinjaObjects {
     }
 
     pub fn in_expr(&self, trigger_point: Point) -> bool {
-        trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.1
+        trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.0
     }
 
     pub fn is_ident(&self, trigger_point: Point) -> Option<String> {
@@ -176,6 +198,7 @@ pub enum CompletionType {
     Identifier,
     IncludedTemplate { name: String, range: Range },
     Snippets { range: Range },
+    IncompleteIdentifier { name: String, range: Range },
 }
 
 static VALID_IDENTIFIERS: [&str; 8] = [

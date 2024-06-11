@@ -1,10 +1,15 @@
 use jinja_lsp_queries::{
     lsp_helper::{path_items, search_errors},
     search::{
-        completion_start, definition::definition_query, objects::objects_query, queries::Queries,
+        completion_start,
+        definition::definition_query,
+        objects::{objects_query, JinjaObject},
+        queries::Queries,
         rust_identifiers::backend_definition_query,
-        rust_template_completion::backend_templates_query, snippets_completion::snippets_query,
-        templates::templates_query, to_range, Identifier, IdentifierType,
+        rust_template_completion::backend_templates_query,
+        snippets_completion::snippets_query,
+        templates::templates_query,
+        to_range, Identifier, IdentifierType,
     },
     tree_builder::{JinjaDiagnostic, LangType},
 };
@@ -47,11 +52,12 @@ pub struct LspFiles {
     pub parsers: Parsers,
     pub queries: Queries,
     pub config: JinjaConfig,
-    pub diagnostics_task: JoinHandle<()>,
+    pub diagnostics_task: Option<JoinHandle<()>>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
     pub variables: HashMap<String, Vec<Identifier>>,
     pub code_actions: HashMap<String, Vec<Identifier>>,
     pub is_vscode: bool,
+    pub ignore_globals: bool,
 }
 
 impl LspFiles {
@@ -184,14 +190,16 @@ impl LspFiles {
             text_document: TextDocumentIdentifier::new(params.text_document.uri),
             text: None,
         };
-        self.diagnostics_task.abort();
+        if let Some(task) = &self.diagnostics_task {
+            task.abort();
+        }
         let channel = self.main_channel.clone();
-        self.diagnostics_task = tokio::spawn(async move {
+        self.diagnostics_task = Some(tokio::spawn(async move {
             sleep(Duration::from_millis(200)).await;
             if let Some(channel) = channel {
                 let _ = channel.send(LspMessage::DidSave(param)).await;
             }
-        });
+        }));
         None
     }
 
@@ -211,6 +219,7 @@ impl LspFiles {
             &name.to_string(),
             self.config.templates.clone(),
             lang_type,
+            self.ignore_globals,
         )
     }
 
@@ -418,9 +427,19 @@ impl LspFiles {
                         if file.0 == &uri {
                             continue;
                         }
-                        let variables = file.1.iter().filter(|item| item.name == current_ident);
+                        let variables = file.1.iter().filter(|item| {
+                            item.name.split('.').next().unwrap_or(&item.name) == current_ident
+                        });
                         for variable in variables {
-                            let uri = Url::parse(file.0).unwrap();
+                            let uri = {
+                                if variable.start == Point::new(0, 0)
+                                    && variable.end == Point::new(0, 0)
+                                {
+                                    Url::parse(&format!("{}-{}", &file.0, &variable.name)).unwrap()
+                                } else {
+                                    Url::parse(file.0).unwrap()
+                                }
+                            };
                             let start = to_position2(variable.start);
                             let end = to_position2(variable.end);
                             let range = Range::new(start, end);
@@ -618,7 +637,12 @@ impl LspFiles {
         Some(items)
     }
 
-    pub fn read_templates(&self, mut prefix: String, range: Range) -> Option<Vec<CompletionItem>> {
+    pub fn read_templates(
+        &self,
+        mut prefix: String,
+        range: Range,
+        _: Option<String>,
+    ) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
         if prefix.is_empty() {
             prefix = String::from("file:///");
@@ -659,6 +683,16 @@ impl LspFiles {
         Some(abc)
     }
 
+    pub fn get_variable(&self, prefix: String, id: String) -> Option<String> {
+        let variables = self.variables.get(&id)?;
+        for variable in variables {
+            if variable.name.contains(&prefix) {
+                return Some(variable.name.to_string());
+            }
+        }
+        None
+    }
+
     pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {
         let name = params.text_document.uri.as_str();
         let lang_type = self.config.file_ext(&Path::new(name))?;
@@ -675,6 +709,25 @@ impl LspFiles {
         Some(msg)
     }
 
+    pub fn read_objects(&self, uri: Url) -> Option<Vec<JinjaObject>> {
+        let rope = self.documents.get(uri.as_str())?;
+        let mut writter = FileContent::default();
+        let _ = rope.write_to(&mut writter);
+        let content = writter.content;
+        let lang_type = self.config.file_ext(&Path::new(uri.as_str()))?;
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(uri.as_str())?;
+        let objects = objects_query(
+            &self.queries.jinja_objects,
+            tree,
+            Point::new(0, 0),
+            &content,
+            true,
+        );
+        let objects = objects.show();
+        Some(objects)
+    }
+
     pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {
         let this_file = self.variables.get(uri.as_str())?;
         let this_file = this_file
@@ -686,8 +739,23 @@ impl LspFiles {
                 let same_name = hover.name == variable.name;
                 bigger && in_scope && same_name
             })
-            .max()?;
-        Some(this_file.identifier_type.clone())
+            .max();
+        if let Some(this_file) = this_file {
+            return Some(this_file.identifier_type.clone());
+        }
+        for file in &self.variables {
+            if file.0 == &uri.to_string() {
+                continue;
+            }
+            let variables = file
+                .1
+                .iter()
+                .filter(|item| item.name.split('.').next().unwrap_or(&item.name) == hover.name);
+            if variables.count() > 0 {
+                return Some(IdentifierType::BackendVariable);
+            }
+        }
+        None
     }
 
     pub fn document_symbols(
@@ -712,6 +780,23 @@ impl LspFiles {
         }
         Some(DocumentSymbolResponse::Nested(symbols))
     }
+
+    pub fn delete_documents(&mut self) {
+        self.documents.clear();
+    }
+
+    pub fn delete_documents_with_id(&mut self, id: String) {
+        let mut ids = vec![];
+        for i in &self.documents {
+            if i.0.contains(&id) {
+                ids.push(i.0.clone());
+            }
+        }
+        for i in ids {
+            self.documents.remove(&i);
+            self.variables.remove(&i);
+        }
+    }
 }
 
 impl Default for LspFiles {
@@ -719,7 +804,7 @@ impl Default for LspFiles {
         let mut trees = HashMap::new();
         trees.insert(LangType::Template, HashMap::new());
         trees.insert(LangType::Backend, HashMap::new());
-        let diagnostics_task = tokio::spawn(async move {});
+        let diagnostics_task = None;
         let main_channel = None;
         Self {
             trees,
@@ -732,6 +817,35 @@ impl Default for LspFiles {
             variables: HashMap::default(),
             is_vscode: false,
             code_actions: HashMap::default(),
+            ignore_globals: false,
+        }
+    }
+}
+
+impl Clone for LspFiles {
+    fn clone(&self) -> Self {
+        let trees = self.trees.clone();
+        let parsers = Parsers::default();
+        let queries = Queries::default();
+        let documents = self.documents.clone();
+        let main_channel = self.main_channel.clone();
+        let variables = self.variables.clone();
+        let is_vscode = self.is_vscode;
+        let code_actions = self.code_actions.clone();
+        let config = self.config.clone();
+        let task = None;
+        Self {
+            trees,
+            documents,
+            parsers,
+            queries,
+            config,
+            main_channel,
+            variables,
+            code_actions,
+            is_vscode,
+            diagnostics_task: task,
+            ignore_globals: self.ignore_globals,
         }
     }
 }

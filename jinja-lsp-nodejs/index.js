@@ -310,6 +310,10 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { sum } = nativeBinding
+const { basic, NodejsLspFiles, JsIdentifierType, Kind2, JsCompletionType } = nativeBinding
 
-module.exports.sum = sum
+module.exports.basic = basic
+module.exports.NodejsLspFiles = NodejsLspFiles
+module.exports.JsIdentifierType = JsIdentifierType
+module.exports.Kind2 = Kind2
+module.exports.JsCompletionType = JsCompletionType

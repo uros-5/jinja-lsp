@@ -321,6 +321,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "jinja-lsp-nodejs"
+version = "0.1.80"
+dependencies = [
+ "jinja-lsp",
+ "jinja-lsp-queries",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "ropey",
+ "tower-lsp",
+ "tree-sitter",
+]
+
+[[package]]
 name = "jinja-lsp-queries"
 version = "0.1.80"
 dependencies = [
@@ -974,15 +988,6 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
-]
-
-[[package]]
-name = "uros_jinja-lsp-nodejs"
-version = "0.0.0"
-dependencies = [
- "napi",
- "napi-build",
- "napi-derive",
 ]
 
 [[package]]

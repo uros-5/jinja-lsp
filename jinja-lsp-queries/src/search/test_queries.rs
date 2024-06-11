@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod query_tests {
-    use crate::search::{objects::objects_query, snippets_completion::snippets_query};
+    use crate::search::{
+        objects::objects_query, python_identifiers::_python_identifiers,
+        snippets_completion::snippets_query, to_range,
+    };
     use tree_sitter::{Parser, Point};
 
     use crate::{
@@ -195,17 +198,43 @@ mod query_tests {
 
             {{ }}
             {{ "|" }}
+            {{ identifier }}
         "#;
         let cases = [
             (Point::new(1, 27), Some(CompletionType::Filter)),
-            (Point::new(1, 48), None),
+            (
+                Point::new(1, 48),
+                Some(CompletionType::IncompleteIdentifier {
+                    name: "filter2".to_string(),
+                    range: to_range((Point::new(1, 41), Point::new(1, 48))),
+                }),
+            ),
             (Point::new(1, 40), Some(CompletionType::Filter)),
             (Point::new(1, 50), Some(CompletionType::Identifier)),
-            (Point::new(3, 18), None),
+            (
+                Point::new(3, 18),
+                None, // Some(CompletionType::IncompleteIdentifier {
+                      //     name: "something".to_owned(),
+                      //     range: to_range((Point::new(3, 18), Point::new(3, 27))),
+                      // }),
+            ),
             (Point::new(4, 20), None),
-            (Point::new(3, 22), None),
+            (
+                Point::new(3, 22),
+                None, // Some(CompletionType::IncompleteIdentifier {
+                      //     name: "something".to_owned(),
+                      //     range: to_range((Point::new(3, 18), Point::new(3, 27))),
+                      // }),
+            ),
             (Point::new(8, 15), Some(CompletionType::Identifier)),
             (Point::new(9, 18), Some(CompletionType::Identifier)),
+            (
+                Point::new(10, 18),
+                Some(CompletionType::IncompleteIdentifier {
+                    name: "iden".to_string(),
+                    range: to_range((Point::new(10, 15), Point::new(10, 25))),
+                }),
+            ),
         ];
         for case in cases {
             let tree = prepare_jinja_tree(source);
@@ -356,6 +385,21 @@ mod query_tests {
             let tree = prepare_jinja_tree(case.0);
             let snippets = snippets_query(&query, &tree, case.1, case.0, false);
             assert_eq!(snippets.is_error, case.2);
+        }
+    }
+
+    #[test]
+    fn test_python_identifiers() {
+        let cases = [r#"
+            [page.text
+                 for page in retrieval.result.abc]
+             "#];
+
+        let query = Queries::default();
+        let query = query.python_identifiers;
+        for _case in cases {
+            let tree = prepare_python_tree(cases[0]);
+            _python_identifiers(&query, &tree, Point::new(0, 0), cases[0], true);
         }
     }
 }

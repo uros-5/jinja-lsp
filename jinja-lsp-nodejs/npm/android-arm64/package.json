@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-android-arm64",
-  "version": "0.0.4",
+  "version": "0.0.7",
   "os": [
     "android"
   ],

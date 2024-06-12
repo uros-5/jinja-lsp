@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions",
-  "version": "0.0.4",
+  "version": "0.0.7",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
@@ -22,7 +22,7 @@
         "armv7-linux-androideabi",
         "universal-apple-darwin",
         "riscv64gc-unknown-linux-gnu",
-        "linux-x64-gnu"
+        "x86_64-unknown-linux-gnu"
       ]
     }
   },

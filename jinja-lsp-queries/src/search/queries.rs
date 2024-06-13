@@ -279,11 +279,9 @@ pub static PYTHON_DEFINITIONS: &str = r#"
 "#;
 
 const PYTHON_IDENTIFIERS: &str = r#"
-(_
+(attribute
 	(identifier) @identifier
 )
-
-(attribute) @attribute
 
 (ERROR) @error
 "#;

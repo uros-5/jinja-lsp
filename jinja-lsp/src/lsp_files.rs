@@ -4,6 +4,7 @@ use jinja_lsp_queries::{
         completion_start,
         definition::definition_query,
         objects::{objects_query, JinjaObject},
+        python_identifiers::{python_identifiers, PythonIdentifier},
         queries::Queries,
         rust_identifiers::backend_definition_query,
         rust_template_completion::backend_templates_query,
@@ -726,6 +727,23 @@ impl LspFiles {
         );
         let objects = objects.show();
         Some(objects)
+    }
+
+    pub fn read_python_ids(&self, uri: Url) -> Option<Vec<PythonIdentifier>> {
+        let rope = self.documents.get(uri.as_str())?;
+        let mut writter = FileContent::default();
+        let _ = rope.write_to(&mut writter);
+        let content = writter.content;
+        let lang_type = self.config.file_ext(&Path::new(uri.as_str()))?;
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(uri.as_str())?;
+        Some(python_identifiers(
+            &self.queries.python_identifiers,
+            tree,
+            Point::new(0, 0),
+            &content,
+            0,
+        ))
     }
 
     pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {

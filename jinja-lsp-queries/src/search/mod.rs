@@ -5,7 +5,7 @@ use self::objects::JinjaObject;
 
 pub mod definition;
 pub mod objects;
-mod python_identifiers;
+pub mod python_identifiers;
 pub mod queries;
 pub mod rust_identifiers;
 pub mod rust_template_completion;

@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-win32-x64-msvc",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "os": [
     "win32"
   ],

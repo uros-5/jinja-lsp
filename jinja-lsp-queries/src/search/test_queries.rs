@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod query_tests {
     use crate::search::{
-        objects::objects_query, python_identifiers::_python_identifiers,
+        objects::objects_query, python_identifiers::python_identifiers,
         snippets_completion::snippets_query, to_range,
     };
     use tree_sitter::{Parser, Point};
@@ -392,14 +392,15 @@ mod query_tests {
     fn test_python_identifiers() {
         let cases = [r#"
             [page.text
-                 for page in retrieval.result.abc]
+                 for page in retrieval.result.other.field]
              "#];
 
         let query = Queries::default();
         let query = query.python_identifiers;
         for _case in cases {
             let tree = prepare_python_tree(cases[0]);
-            _python_identifiers(&query, &tree, Point::new(0, 0), cases[0], true);
+            let ids = python_identifiers(&query, &tree, Point::new(0, 0), cases[0], 0);
+            assert_eq!(ids.len(), 2);
         }
     }
 }

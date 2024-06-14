@@ -7,9 +7,9 @@
   "cpu": [
     "x64"
   ],
-  "main": "functions.win32-x64-msvc",
+  "main": "functions.win32-x64-msvc.node",
   "files": [
-    "functions.win32-x64-msvc"
+    "functions.win32-x64-msvc.node"
   ],
   "description": "Bindings for jinja-lsp",
   "license": "MIT",

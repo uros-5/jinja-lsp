@@ -182,7 +182,8 @@ pub fn lsp_task(
                                 }
                             }
                             CompletionType::IncludedTemplate { name, range } => {
-                                if let Some(templates) = lsp_data.read_templates(name, range, None)
+                                if let Some(templates) =
+                                    lsp_data.read_templates(name, range, position, None)
                                 {
                                     items = Some(CompletionResponse::Array(templates));
                                 }
@@ -216,7 +217,8 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(filtered));
                                 }
                             }
-                            CompletionType::IncompleteIdentifier { .. } => {}
+                            CompletionType::IncompleteIdentifier { name, range } => {}
+                            CompletionType::IncompleteFilter { .. } => {}
                         };
                     }
                     let _ = sender.send(items);

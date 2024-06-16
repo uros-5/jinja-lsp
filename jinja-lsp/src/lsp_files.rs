@@ -24,8 +24,8 @@ use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Command, CompletionItemKind,
     CompletionTextEdit, CreateFile, CreateFileOptions, DidOpenTextDocumentParams,
-    DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolResponse, ResourceOp,
-    TextDocumentIdentifier, TextEdit, WorkspaceEdit,
+    DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolResponse,
+    InsertReplaceEdit, ResourceOp, TextDocumentIdentifier, TextEdit, WorkspaceEdit,
 };
 
 use jinja_lsp_queries::{
@@ -287,7 +287,7 @@ impl LspFiles {
                 let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
                 if let Some(completion) = objects.completion(point) {
-                    return Some(completion);
+                    return Some(completion.0);
                 }
                 let query = &self.queries.jinja_imports;
                 let query = templates_query(query, tree, point, &writter.content, false);
@@ -642,6 +642,7 @@ impl LspFiles {
         &self,
         mut prefix: String,
         range: Range,
+        start_point: Position,
         _: Option<String>,
     ) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
@@ -664,11 +665,26 @@ impl LspFiles {
             parts.next();
             let label = parts.next()?.replacen('/', "", 1);
             let new_text = format!("\"{label}\"");
+            let mut additional_text_edits = None;
             let text_edit = {
                 if self.is_vscode {
-                    None
+                    let vec = vec![];
+                    let mut edits = vec;
+                    edits.push(TextEdit { range, new_text });
+                    additional_text_edits = Some(edits);
+                    Some(CompletionTextEdit::Edit(TextEdit {
+                        range: Range {
+                            start: start_point,
+                            end: start_point,
+                        },
+                        new_text: "".to_string(),
+                    }))
                 } else {
-                    Some(CompletionTextEdit::Edit(TextEdit::new(range, new_text)))
+                    Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                        new_text,
+                        insert: range,
+                        replace: range,
+                    }))
                 }
             };
             let item = CompletionItem {
@@ -676,6 +692,7 @@ impl LspFiles {
                 detail: Some("Jinja template".to_string()),
                 kind: Some(CompletionItemKind::FILE),
                 text_edit,
+                additional_text_edits,
                 ..Default::default()
             };
             abc.push(item);

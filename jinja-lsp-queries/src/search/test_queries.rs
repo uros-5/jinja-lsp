@@ -199,43 +199,87 @@ mod query_tests {
             {{ }}
             {{ "|" }}
             {{ identifier }}
+            {{}}
+            {{ identifier }}
         "#;
         let cases = [
-            (Point::new(1, 27), Some(CompletionType::Filter)),
+            (Point::new(1, 27), Some((CompletionType::Filter, false))),
             (
-                Point::new(1, 48),
-                Some(CompletionType::IncompleteIdentifier {
-                    name: "filter2".to_string(),
-                    range: to_range((Point::new(1, 41), Point::new(1, 48))),
-                }),
+                Point::new(1, 47),
+                Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: "filter".to_string(),
+                        range: to_range((Point::new(1, 41), Point::new(1, 48))),
+                    },
+                    false,
+                )),
             ),
-            (Point::new(1, 40), Some(CompletionType::Filter)),
-            (Point::new(1, 50), Some(CompletionType::Identifier)),
+            (
+                Point::new(1, 46),
+                Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: "filte".to_string(),
+                        range: to_range((Point::new(1, 41), Point::new(1, 48))),
+                    },
+                    false,
+                )),
+            ),
+            (Point::new(1, 40), Some((CompletionType::Filter, false))),
+            (Point::new(1, 50), Some((CompletionType::Identifier, false))),
             (
                 Point::new(3, 18),
-                None, // Some(CompletionType::IncompleteIdentifier {
+                None, // Some((CompletionType::IncompleteIdentifier {
                       //     name: "something".to_owned(),
                       //     range: to_range((Point::new(3, 18), Point::new(3, 27))),
-                      // }),
+                      // }, false)),
             ),
             (Point::new(4, 20), None),
             (
                 Point::new(3, 22),
-                None, // Some(CompletionType::IncompleteIdentifier {
+                None, // Some((CompletionType::IncompleteIdentifier {
                       //     name: "something".to_owned(),
                       //     range: to_range((Point::new(3, 18), Point::new(3, 27))),
-                      // }),
+                      // }, false)),
             ),
-            (Point::new(8, 15), Some(CompletionType::Identifier)),
-            (Point::new(9, 18), Some(CompletionType::Identifier)),
+            (Point::new(8, 15), Some((CompletionType::Identifier, false))),
+            (Point::new(9, 18), Some((CompletionType::Identifier, false))),
             (
                 Point::new(10, 18),
-                Some(CompletionType::IncompleteIdentifier {
-                    name: "iden".to_string(),
-                    range: to_range((Point::new(10, 15), Point::new(10, 25))),
-                }),
+                Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: "ide".to_string(),
+                        range: to_range((Point::new(10, 15), Point::new(10, 25))),
+                    },
+                    false,
+                )),
+            ),
+            (
+                Point::new(11, 14),
+                Some((CompletionType::Identifier, false)),
+            ),
+            (
+                Point::new(12, 25),
+                Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: "identifier".to_string(),
+                        range: to_range((Point::new(12, 15), Point::new(12, 25))),
+                    },
+                    false,
+                )),
             ),
         ];
+        for case in cases {
+            let tree = prepare_jinja_tree(source);
+            let trigger_point = case.0;
+            let query = Queries::default();
+            let query = &query.jinja_objects;
+            let objects = objects_query(query, &tree, trigger_point, source, false);
+            assert_eq!(objects.completion(trigger_point), case.1);
+        }
+        let source = r#"
+            {{
+        "#;
+        let cases = [(Point::new(1, 14), Some((CompletionType::Identifier, true)))];
         for case in cases {
             let tree = prepare_jinja_tree(source);
             let trigger_point = case.0;
@@ -318,7 +362,7 @@ mod query_tests {
         let templates = backend_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
             if let Some(completion) = completion_start(trigger_point, template) {
-                assert_eq!(completion, "accou");
+                assert_eq!(completion, "acco");
             }
         }
     }
@@ -339,7 +383,7 @@ mod query_tests {
         let templates = backend_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
             if let Some(completion) = completion_start(trigger_point, template) {
-                assert_eq!(completion, "accou");
+                assert_eq!(completion, "acco");
             }
         }
     }

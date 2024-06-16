@@ -53,7 +53,10 @@ impl From<&JinjaObject> for Identifier {
     }
 }
 
-pub fn completion_start(trigger_point: Point, identifier: &Identifier) -> Option<&str> {
+pub fn completion_start(mut trigger_point: Point, identifier: &Identifier) -> Option<&str> {
+    if trigger_point.column > 0 {
+        trigger_point.column -= 1;
+    }
     let len = identifier.name.len();
     let diff = identifier.end.column - trigger_point.column;
     if diff == 0 || diff == 1 {

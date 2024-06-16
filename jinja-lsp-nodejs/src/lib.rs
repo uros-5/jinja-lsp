@@ -403,6 +403,7 @@ impl NodejsLspFiles {
         }];
         items = Some(ret);
       }
+      CompletionType::IncompleteFilter { .. } => {}
     };
     items
   }

@@ -1,5 +1,7 @@
+use std::fs;
+
 use tower_lsp::lsp_types::Range;
-use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
+use tree_sitter::{Node, Point, Query, QueryCapture, QueryCursor, Tree};
 
 use super::{completion_start, to_range, Identifier};
 
@@ -36,7 +38,7 @@ pub struct JinjaObjects {
     objects: Vec<JinjaObject>,
     dot: (Point, Point),
     pipe: (Point, Point),
-    expr: (Point, Point),
+    expr: (Point, Point, ExpressionPoints),
     ident: (Point, Point),
 }
 
@@ -61,7 +63,17 @@ impl JinjaObjects {
                 }
             }
             "expr" => {
-                self.expr = (start, end);
+                let mut cursor = capture.node.walk();
+                cursor.goto_first_child();
+                let first = cursor.node();
+                cursor.reset(capture.node);
+                cursor.goto_last_child();
+                let last = cursor.node();
+                let expr = ExpressionPoints {
+                    begin: (first.start_position(), first.end_position()),
+                    end: (last.start_position(), last.end_position()),
+                };
+                self.expr = (start, end, expr);
             }
             _ => (),
         }
@@ -108,26 +120,32 @@ impl JinjaObjects {
         }
     }
 
-    pub fn completion(&self, trigger_point: Point) -> Option<CompletionType> {
+    pub fn completion(&self, trigger_point: Point) -> Option<(CompletionType, bool)> {
+        let autoclose = self.should_autoclose();
         if self.in_pipe(trigger_point) {
-            return Some(CompletionType::Filter);
-        }
-        if self.in_expr(trigger_point) {
+            return Some((CompletionType::Filter, autoclose));
+        } else if self.in_expr(trigger_point) {
+            if trigger_point == self.expr.2.begin.1 && trigger_point == self.expr.2.end.0 {
+                return Some((CompletionType::Identifier, autoclose));
+            }
             if trigger_point > self.ident.1 {
-                return Some(CompletionType::Identifier);
+                return Some((CompletionType::Identifier, autoclose));
             }
             if let Some(ident_value) = self.is_ident(trigger_point) {
                 // if let Some(ident2) = self.objects.last().map(|last| last) {
                 let identifier = Identifier::new(&ident_value, self.ident.0, self.ident.1);
                 let start = completion_start(trigger_point, &identifier);
                 let range = to_range((self.ident.0, self.ident.1));
-                return Some(CompletionType::IncompleteIdentifier {
-                    name: start?.to_string(),
-                    range,
-                });
+                return Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: start?.to_string(),
+                        range,
+                    },
+                    autoclose,
+                ));
                 // }
             }
-            return Some(CompletionType::Identifier);
+            return Some((CompletionType::Identifier, autoclose));
         }
         None
     }
@@ -138,6 +156,11 @@ impl JinjaObjects {
 
     pub fn in_expr(&self, trigger_point: Point) -> bool {
         trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.0
+            || self.expr.2.begin.1 == self.expr.2.end.0
+    }
+
+    pub fn should_autoclose(&self) -> bool {
+        self.expr.2.end.0 == self.expr.2.end.1
     }
 
     pub fn is_ident(&self, trigger_point: Point) -> Option<String> {
@@ -199,8 +222,15 @@ pub enum CompletionType {
     IncludedTemplate { name: String, range: Range },
     Snippets { range: Range },
     IncompleteIdentifier { name: String, range: Range },
+    IncompleteFilter { name: String, range: Range },
 }
 
 static VALID_IDENTIFIERS: [&str; 8] = [
     "loop", "true", "false", "not", "as", "module", "super", "url_for",
 ];
+
+#[derive(Default, Debug)]
+pub struct ExpressionPoints {
+    begin: (Point, Point),
+    end: (Point, Point),
+}

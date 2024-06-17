@@ -347,6 +347,7 @@ impl NodejsLspFiles {
         }
         items = Some(ret);
       }
+
       CompletionType::Identifier => {
         if let Some(variables) = self.lsp_files.read_variables(&uri, position, None) {
           let mut ret = vec![];

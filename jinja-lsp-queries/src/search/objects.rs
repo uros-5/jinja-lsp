@@ -1,9 +1,7 @@
-use std::fs;
-
 use tower_lsp::lsp_types::Range;
-use tree_sitter::{Node, Point, Query, QueryCapture, QueryCursor, Tree};
+use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
 
-use super::{completion_start, to_range, Identifier};
+use super::{completion_start, to_range, to_range2, Identifier};
 
 #[derive(Default, Debug, Clone)]
 pub struct JinjaObject {
@@ -11,6 +9,7 @@ pub struct JinjaObject {
     pub location: (Point, Point),
     pub is_filter: bool,
     pub fields: Vec<(String, (Point, Point))>,
+    pub capture_first: bool,
 }
 
 impl JinjaObject {
@@ -20,6 +19,7 @@ impl JinjaObject {
             location: (start, end),
             fields: vec![],
             is_filter,
+            capture_first: false,
         }
     }
 
@@ -44,12 +44,17 @@ pub struct JinjaObjects {
     objects: Vec<JinjaObject>,
     dot: (Point, Point),
     pipe: (Point, Point),
-    expr: (Point, Point, ExpressionPoints),
+    expr: (Point, Point, ExpressionRange),
     ident: (Point, Point),
 }
 
 impl JinjaObjects {
-    fn check(&mut self, name: &str, capture: &QueryCapture<'_>, source: &str) -> Option<()> {
+    fn check(
+        &mut self,
+        name: &str,
+        capture: &QueryCapture<'_>,
+        source: &str,
+    ) -> Option<ObjectAction> {
         let start = capture.node.start_position();
         let end = capture.node.end_position();
         match name {
@@ -57,16 +62,18 @@ impl JinjaObjects {
                 return None;
             }
             "just_id" => {
-                self.build_object(capture, source);
+                return Some(self.build_object(capture, source));
             }
             "dot" => {
                 self.dot = (start, end);
+                return Some(ObjectAction::NewField);
             }
             "pipe" => {
                 let content = capture.node.utf8_text(source.as_bytes()).ok()?;
                 if content.starts_with('|') {
                     self.pipe = (start, end);
                 }
+                return Some(ObjectAction::NewFilter);
             }
             "expr" => {
                 let mut cursor = capture.node.walk();
@@ -75,18 +82,19 @@ impl JinjaObjects {
                 cursor.reset(capture.node);
                 cursor.goto_last_child();
                 let last = cursor.node();
-                let expr = ExpressionPoints {
+                let expr = ExpressionRange {
                     begin: (first.start_position(), first.end_position()),
                     end: (last.start_position(), last.end_position()),
                 };
                 self.expr = (start, end, expr);
+                return Some(ObjectAction::Expression);
             }
             _ => (),
         }
-        Some(())
+        Some(ObjectAction::Invalid)
     }
 
-    pub fn build_object(&mut self, capture: &QueryCapture<'_>, source: &str) {
+    pub fn build_object(&mut self, capture: &QueryCapture<'_>, source: &str) -> ObjectAction {
         let value = capture.node.utf8_text(source.as_bytes());
         let start = capture.node.start_position();
         let end = capture.node.end_position();
@@ -101,7 +109,7 @@ impl JinjaObjects {
                     None => {
                         // TODO: in future add those to main library
                         if VALID_IDENTIFIERS.contains(&value) {
-                            return;
+                            return ObjectAction::Invalid;
                         }
                         self.ident = (start, end);
                         let is_filter = self.is_hover(start) && self.is_filter();
@@ -111,19 +119,22 @@ impl JinjaObjects {
                             end,
                             is_filter,
                         ));
+                        return ObjectAction::NewObject;
                     }
                 }
             } else {
                 // TODO: in future add those to main library
                 if VALID_IDENTIFIERS.contains(&value) {
-                    return;
+                    return ObjectAction::Invalid;
                 }
                 self.ident = (start, end);
                 let is_filter = self.is_hover(start) && self.is_filter();
                 self.objects
                     .push(JinjaObject::new(String::from(value), start, end, is_filter));
+                return ObjectAction::NewObject;
             }
         }
+        ObjectAction::Invalid
     }
 
     pub fn completion(&self, trigger_point: Point) -> Option<(CompletionType, bool)> {
@@ -179,7 +190,9 @@ impl JinjaObjects {
     }
 
     pub fn is_hover(&self, trigger_point: Point) -> bool {
+        let full_range = self.full_range();
         trigger_point >= self.ident.0 && trigger_point <= self.ident.1
+            || to_range2(full_range, trigger_point)
     }
 
     pub fn is_filter(&self) -> bool {
@@ -212,17 +225,64 @@ pub fn objects_query(
     let mut objects = JinjaObjects::default();
     let mut cursor_qry = QueryCursor::new();
     let capture_names = query.capture_names();
+    let mut continued = false;
+    let mut my_id = 0;
+    let mut my_expr = (
+        Point::default(),
+        Point::default(),
+        ExpressionRange::default(),
+    );
     let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
-    let captures = matches.into_iter().flat_map(|m| {
-        m.captures
-            .iter()
-            .filter(|capture| all || capture.node.start_position() <= trigger_point)
-    });
-    for capture in captures {
-        let name = &capture_names[capture.index as usize];
-        let checked = objects.check(name, capture, text);
-        if checked.is_none() {
-            break;
+    'loop1: for m in matches {
+        for capture in m.captures {
+            let smaller = trigger_point <= capture.node.start_position();
+            if all || trigger_point >= capture.node.start_position() {
+                let name = &capture_names[capture.index as usize];
+                let checked = objects.check(name, capture, text);
+                if checked.is_none() {
+                    break 'loop1;
+                }
+            } else if smaller {
+                if objects.is_filter() {
+                    break 'loop1;
+                } else if !continued {
+                    if objects.is_hover(trigger_point) {
+                        continued = true;
+                        my_id = objects.objects.len() - 1;
+                        my_expr = objects.expr;
+                        continue;
+                    } else {
+                        break 'loop1;
+                    }
+                } else if continued {
+                    let name = &capture_names[capture.index as usize];
+                    let checked = objects.check(name, capture, text);
+                    if checked.is_none() {
+                        break 'loop1;
+                    } else if checked.is_some_and(|item| {
+                        matches!(
+                            item,
+                            ObjectAction::Expression
+                                | ObjectAction::NewObject
+                                | ObjectAction::Invalid
+                        )
+                    }) {
+                        objects
+                            .objects
+                            .get_mut(my_id)
+                            .and_then(|obj| -> Option<()> {
+                                objects.ident = obj.location;
+                                obj.capture_first = true;
+                                None
+                            });
+                        if my_id != objects.objects.len() - 1 {
+                            objects.objects.pop();
+                            objects.expr = my_expr;
+                        }
+                        break 'loop1;
+                    }
+                }
+            }
         }
     }
     objects
@@ -242,8 +302,17 @@ static VALID_IDENTIFIERS: [&str; 8] = [
     "loop", "true", "false", "not", "as", "module", "super", "url_for",
 ];
 
-#[derive(Default, Debug)]
-pub struct ExpressionPoints {
+#[derive(Default, Debug, Clone, Copy)]
+pub struct ExpressionRange {
     begin: (Point, Point),
     end: (Point, Point),
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum ObjectAction {
+    Expression,
+    Invalid,
+    NewField,
+    NewFilter,
+    NewObject,
 }

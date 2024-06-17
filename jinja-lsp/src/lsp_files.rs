@@ -755,20 +755,22 @@ impl LspFiles {
     }
 
     pub fn get_variable(&self, prefix: String, id: String, file_name: &str) -> Option<Vec<String>> {
-        // let mut v = vec![];
+        let mut v = vec![];
         let variables = self.variables.get(&id)?;
         for variable in variables {
             if variable.name.contains(&prefix) {
-                // return Some(variable.name.to_string());
+                v.push(variable.name.to_string());
             }
         }
-        let variables = self.variables.get(file_name)?;
-        let items: Vec<String> = variables
+        let temp = vec![];
+        let variables = self.variables.get(file_name).unwrap_or(&temp);
+        let mut items: Vec<String> = variables
             .iter()
             .filter(|item| item.name.contains(&prefix))
             .map(|item| item.name.to_string())
             .collect();
-        Some(items)
+        v.append(&mut items);
+        Some(v)
     }
 
     pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {

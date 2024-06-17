@@ -79,6 +79,16 @@ pub fn to_range(points: (Point, Point)) -> Range {
     Range::new(start, end)
 }
 
+pub fn to_point(position: Position) -> Point {
+    Point::new(position.line as usize, position.character as usize)
+}
+
+pub fn to_range2(range: Range, point: Point) -> bool {
+    let start = to_point(range.start);
+    let end = to_point(range.end);
+    point >= start && point <= end
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IdentifierType {
     ForLoopKey,

@@ -190,10 +190,10 @@ mod query_tests {
     fn find_jinja_completion() {
         let source = r#"
             {{ something |     filter1 | filter2 }}
-
+            {{ some_identifier.otherfields }}
             {% if something == 11 -%}
             {% macro example(a, b, c) -%}
-            <p> hello world</p>
+            <p> hello world</p> 
             {%- endmacro %}
 
             {{ }}
@@ -203,6 +203,16 @@ mod query_tests {
             {{ identifier }}
         "#;
         let cases = [
+            (
+                Point::new(2, 24),
+                Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: "some_iden".to_string(),
+                        range: to_range((Point::new(2, 15), Point::new(2, 42))),
+                    },
+                    false,
+                )),
+            ),
             (Point::new(1, 27), Some((CompletionType::Filter, false))),
             (
                 Point::new(1, 47),
@@ -248,6 +258,16 @@ mod query_tests {
                 Some((
                     CompletionType::IncompleteIdentifier {
                         name: "ide".to_string(),
+                        range: to_range((Point::new(10, 15), Point::new(10, 25))),
+                    },
+                    false,
+                )),
+            ),
+            (
+                Point::new(10, 25),
+                Some((
+                    CompletionType::IncompleteIdentifier {
+                        name: "identifier".to_string(),
                         range: to_range((Point::new(10, 15), Point::new(10, 25))),
                     },
                     false,

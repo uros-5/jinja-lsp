@@ -31,6 +31,12 @@ impl JinjaObject {
         let last = self.fields.last().map_or(self.location.1, |v| v.1 .1);
         last
     }
+
+    pub fn full_range(&self) -> Range {
+        let start = self.location.0;
+        let end = self.last_field_end();
+        to_range((start, end))
+    }
 }
 
 #[derive(Default, Debug)]
@@ -135,7 +141,8 @@ impl JinjaObjects {
                 // if let Some(ident2) = self.objects.last().map(|last| last) {
                 let identifier = Identifier::new(&ident_value, self.ident.0, self.ident.1);
                 let start = completion_start(trigger_point, &identifier);
-                let range = to_range((self.ident.0, self.ident.1));
+                // let range = to_range((self.ident.0, self.ident.1));
+                let range = self.full_range();
                 return Some((
                     CompletionType::IncompleteIdentifier {
                         name: start?.to_string(),
@@ -185,6 +192,12 @@ impl JinjaObjects {
 
     pub fn show(&self) -> Vec<JinjaObject> {
         self.objects.clone()
+    }
+
+    pub fn full_range(&self) -> Range {
+        self.objects
+            .last()
+            .map_or(Range::default(), |item| item.full_range())
     }
 }
 

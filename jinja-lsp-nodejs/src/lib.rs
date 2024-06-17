@@ -330,7 +330,7 @@ impl NodejsLspFiles {
     let completion = self.lsp_files.completion(params)?;
     let mut items = None;
 
-    match completion {
+    match completion.0 {
       CompletionType::Filter => {
         let completions = self.filters.clone();
         let mut ret = Vec::with_capacity(completions.len());
@@ -391,16 +391,22 @@ impl NodejsLspFiles {
       CompletionType::IncompleteIdentifier { name, mut range } => {
         range.start.line += line;
         range.end.line += line;
-        let variable = self.lsp_files.get_variable(name, uri.to_string())?;
-        let ret = vec![JsCompletionItem {
-          completion_type: JsCompletionType::Identifier,
-          label: variable.to_string(),
-          kind: Kind2::VARIABLE,
-          description: variable.to_string(),
-          new_text: Some(variable),
-          insert: Some(JsRange::from(&range)),
-          replace: Some(JsRange::from(&range)),
-        }];
+        let mut ret = vec![];
+        let variables = self
+          .lsp_files
+          .get_variable(name, uri.to_string(), &filename)?;
+        for variable in variables {
+          let item = JsCompletionItem {
+            completion_type: JsCompletionType::Identifier,
+            label: variable.to_string(),
+            kind: Kind2::VARIABLE,
+            description: variable.to_string(),
+            new_text: Some(variable),
+            insert: Some(JsRange::from(&range)),
+            replace: Some(JsRange::from(&range)),
+          };
+          ret.push(item);
+        }
         items = Some(ret);
       }
       CompletionType::IncompleteFilter { .. } => {}

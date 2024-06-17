@@ -245,7 +245,7 @@ impl LspFiles {
         Some(message)
     }
 
-    pub fn completion(&self, params: CompletionParams) -> Option<CompletionType> {
+    pub fn completion(&self, params: CompletionParams) -> Option<(CompletionType, bool)> {
         let can_complete = {
             matches!(
                 params.context,
@@ -282,22 +282,25 @@ impl LspFiles {
                     let mut end = to_position2(point);
                     end.character += 1;
                     let range = Range::new(start, end);
-                    return Some(CompletionType::Snippets { range });
+                    return Some((CompletionType::Snippets { range }, false));
                 }
                 let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
                 if let Some(completion) = objects.completion(point) {
-                    return Some(completion.0);
+                    return Some(completion);
                 }
                 let query = &self.queries.jinja_imports;
                 let query = templates_query(query, tree, point, &writter.content, false);
                 let identifier = query.in_template(point)?.get_identifier(point)?;
                 let start = completion_start(point, identifier)?;
                 let range = to_range((identifier.start, identifier.end));
-                Some(CompletionType::IncludedTemplate {
-                    name: start.to_owned(),
-                    range,
-                })
+                Some((
+                    CompletionType::IncludedTemplate {
+                        name: start.to_owned(),
+                        range,
+                    },
+                    false,
+                ))
             }
             LangType::Backend => {
                 let rust_templates = backend_templates_query(
@@ -310,10 +313,13 @@ impl LspFiles {
                 let identifier = rust_templates.in_template(point)?;
                 let start = completion_start(point, identifier)?;
                 let range = to_range((identifier.start, identifier.end));
-                Some(CompletionType::IncludedTemplate {
-                    name: start.to_owned(),
-                    range,
-                })
+                Some((
+                    CompletionType::IncludedTemplate {
+                        name: start.to_owned(),
+                        range,
+                    },
+                    false,
+                ))
             }
         }
     }
@@ -748,14 +754,21 @@ impl LspFiles {
         Some(abc)
     }
 
-    pub fn get_variable(&self, prefix: String, id: String) -> Option<String> {
+    pub fn get_variable(&self, prefix: String, id: String, file_name: &str) -> Option<Vec<String>> {
+        // let mut v = vec![];
         let variables = self.variables.get(&id)?;
         for variable in variables {
             if variable.name.contains(&prefix) {
-                return Some(variable.name.to_string());
+                // return Some(variable.name.to_string());
             }
         }
-        None
+        let variables = self.variables.get(file_name)?;
+        let items: Vec<String> = variables
+            .iter()
+            .filter(|item| item.name.contains(&prefix))
+            .map(|item| item.name.to_string())
+            .collect();
+        Some(items)
     }
 
     pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {

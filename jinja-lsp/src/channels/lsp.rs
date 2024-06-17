@@ -157,7 +157,7 @@ pub fn lsp_task(
                     let mut items = None;
 
                     if let Some(completion) = completion {
-                        match completion {
+                        match completion.0 {
                             CompletionType::Filter => {
                                 let completions = filters.clone();
                                 let mut ret = Vec::with_capacity(completions.len());

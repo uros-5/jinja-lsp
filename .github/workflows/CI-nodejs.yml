@@ -9,7 +9,7 @@ permissions:
 'on':
   push:
     branches:
-      - nodejs
+      - completion-fix
     tags-ignore:
       - '**'
     paths-ignore:

@@ -177,7 +177,9 @@ pub fn lsp_task(
                                 items = Some(CompletionResponse::Array(ret));
                             }
                             CompletionType::Identifier => {
-                                if let Some(variables) = lsp_data.read_variables(&uri, position) {
+                                if let Some(variables) =
+                                    lsp_data.read_variables(&uri, position, None)
+                                {
                                     items = Some(CompletionResponse::Array(variables));
                                 }
                             }
@@ -217,7 +219,13 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(filtered));
                                 }
                             }
-                            CompletionType::IncompleteIdentifier { name, range } => {}
+                            CompletionType::IncompleteIdentifier { name, range } => {
+                                if let Some(variables) =
+                                    lsp_data.read_variables(&uri, position, Some((name, range)))
+                                {
+                                    items = Some(CompletionResponse::Array(variables));
+                                }
+                            }
                             CompletionType::IncompleteFilter { .. } => {}
                         };
                     }

@@ -593,7 +593,12 @@ impl LspFiles {
         }
     }
 
-    pub fn read_variables(&self, uri: &Url, position: Position) -> Option<Vec<CompletionItem>> {
+    pub fn read_variables(
+        &self,
+        uri: &Url,
+        position: Position,
+        starting: Option<(String, Range)>,
+    ) -> Option<Vec<CompletionItem>> {
         let mut items = vec![];
         let start = position.line as usize;
         let end = position.character as usize;
@@ -612,15 +617,57 @@ impl LspFiles {
                 let in_scope = position <= variable.scope_ends.1;
                 bigger && in_scope
             });
+        let (start_item, incomplete_range) = starting.unwrap_or(("".to_string(), Range::default()));
         for identifier in this_file {
             if !names.contains(&identifier.name) {
                 names.insert(&identifier.name);
-                items.push(CompletionItem {
+                let mut completion_item = CompletionItem {
                     label: identifier.name.to_string(),
                     detail: Some(identifier.identifier_type.completion_detail().to_owned()),
                     kind: Some(identifier.identifier_type.completion_kind()),
                     ..Default::default() // detail: Some()
-                });
+                };
+                if &start_item == "" {
+                    items.push(completion_item);
+                } else {
+                    if identifier.name.starts_with(&start_item) {
+                        let mut additional_text_edits = None;
+                        let text_edit = if self.is_vscode {
+                            let vec = vec![];
+                            let mut edits = vec;
+                            edits.push(TextEdit {
+                                range: incomplete_range,
+                                new_text: start_item.to_string(),
+                            });
+                            additional_text_edits = Some(edits);
+                            CompletionTextEdit::Edit(TextEdit {
+                                range: Range {
+                                    start: incomplete_range.start,
+                                    end: incomplete_range.start,
+                                },
+                                new_text: "".to_string(),
+                            })
+                        } else {
+                            CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                                new_text: identifier.name.to_string(),
+                                insert: incomplete_range,
+                                replace: incomplete_range,
+                            })
+                        };
+                        completion_item.text_edit = Some(text_edit);
+                        completion_item.additional_text_edits = additional_text_edits;
+                        items.push(completion_item);
+                    }
+                }
+
+                // let starts = starting
+                //     .as_ref()
+                //     .is_some_and(|start| start.0 == identifier.name && !start.0.is_empty());
+                // if starts {
+                //     // create textedit
+                // } else if starting.is_some() && !starts {
+                //     // TODO: it failed, ignore
+                // }
             }
         }
         for file in self.variables.iter() {

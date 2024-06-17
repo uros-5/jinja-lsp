@@ -58,12 +58,16 @@ pub fn completion_start(mut trigger_point: Point, identifier: &Identifier) -> Op
         trigger_point.column -= 1;
     }
     let len = identifier.name.len();
+    if len == 0 {
+        return Some("");
+    }
     let diff = identifier.end.column - trigger_point.column;
     if diff == 0 || diff == 1 {
         return Some(&identifier.name);
     }
     if diff > len {
-        return None;
+        return Some(&identifier.name);
+        // return None;
     }
     let to = len - diff;
     let s = identifier.name.get(0..to + 1);

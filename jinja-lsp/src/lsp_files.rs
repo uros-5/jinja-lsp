@@ -4,6 +4,7 @@ use jinja_lsp_queries::{
         completion_start,
         definition::definition_query,
         objects::{objects_query, JinjaObject},
+        python_identifiers::{python_identifiers, PythonIdentifier},
         queries::Queries,
         rust_identifiers::backend_definition_query,
         rust_template_completion::backend_templates_query,
@@ -23,8 +24,8 @@ use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Command, CompletionItemKind,
     CompletionTextEdit, CreateFile, CreateFileOptions, DidOpenTextDocumentParams,
-    DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolResponse, ResourceOp,
-    TextDocumentIdentifier, TextEdit, WorkspaceEdit,
+    DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolResponse,
+    InsertReplaceEdit, ResourceOp, TextDocumentIdentifier, TextEdit, WorkspaceEdit,
 };
 
 use jinja_lsp_queries::{
@@ -244,7 +245,7 @@ impl LspFiles {
         Some(message)
     }
 
-    pub fn completion(&self, params: CompletionParams) -> Option<CompletionType> {
+    pub fn completion(&self, params: CompletionParams) -> Option<(CompletionType, bool)> {
         let can_complete = {
             matches!(
                 params.context,
@@ -281,7 +282,7 @@ impl LspFiles {
                     let mut end = to_position2(point);
                     end.character += 1;
                     let range = Range::new(start, end);
-                    return Some(CompletionType::Snippets { range });
+                    return Some((CompletionType::Snippets { range }, false));
                 }
                 let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
@@ -293,10 +294,13 @@ impl LspFiles {
                 let identifier = query.in_template(point)?.get_identifier(point)?;
                 let start = completion_start(point, identifier)?;
                 let range = to_range((identifier.start, identifier.end));
-                Some(CompletionType::IncludedTemplate {
-                    name: start.to_owned(),
-                    range,
-                })
+                Some((
+                    CompletionType::IncludedTemplate {
+                        name: start.to_owned(),
+                        range,
+                    },
+                    false,
+                ))
             }
             LangType::Backend => {
                 let rust_templates = backend_templates_query(
@@ -309,10 +313,13 @@ impl LspFiles {
                 let identifier = rust_templates.in_template(point)?;
                 let start = completion_start(point, identifier)?;
                 let range = to_range((identifier.start, identifier.end));
-                Some(CompletionType::IncludedTemplate {
-                    name: start.to_owned(),
-                    range,
-                })
+                Some((
+                    CompletionType::IncludedTemplate {
+                        name: start.to_owned(),
+                        range,
+                    },
+                    false,
+                ))
             }
         }
     }
@@ -592,7 +599,12 @@ impl LspFiles {
         }
     }
 
-    pub fn read_variables(&self, uri: &Url, position: Position) -> Option<Vec<CompletionItem>> {
+    pub fn read_variables(
+        &self,
+        uri: &Url,
+        position: Position,
+        starting: Option<(String, Range)>,
+    ) -> Option<Vec<CompletionItem>> {
         let mut items = vec![];
         let start = position.line as usize;
         let end = position.character as usize;
@@ -611,15 +623,57 @@ impl LspFiles {
                 let in_scope = position <= variable.scope_ends.1;
                 bigger && in_scope
             });
+        let (start_item, incomplete_range) = starting.unwrap_or(("".to_string(), Range::default()));
         for identifier in this_file {
             if !names.contains(&identifier.name) {
                 names.insert(&identifier.name);
-                items.push(CompletionItem {
+                let mut completion_item = CompletionItem {
                     label: identifier.name.to_string(),
                     detail: Some(identifier.identifier_type.completion_detail().to_owned()),
                     kind: Some(identifier.identifier_type.completion_kind()),
                     ..Default::default() // detail: Some()
-                });
+                };
+                if &start_item == "" {
+                    items.push(completion_item);
+                } else {
+                    if identifier.name.starts_with(&start_item) {
+                        let mut additional_text_edits = None;
+                        let text_edit = if self.is_vscode {
+                            let vec = vec![];
+                            let mut edits = vec;
+                            edits.push(TextEdit {
+                                range: incomplete_range,
+                                new_text: start_item.to_string(),
+                            });
+                            additional_text_edits = Some(edits);
+                            CompletionTextEdit::Edit(TextEdit {
+                                range: Range {
+                                    start: incomplete_range.start,
+                                    end: incomplete_range.start,
+                                },
+                                new_text: "".to_string(),
+                            })
+                        } else {
+                            CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                                new_text: identifier.name.to_string(),
+                                insert: incomplete_range,
+                                replace: incomplete_range,
+                            })
+                        };
+                        completion_item.text_edit = Some(text_edit);
+                        completion_item.additional_text_edits = additional_text_edits;
+                        items.push(completion_item);
+                    }
+                }
+
+                // let starts = starting
+                //     .as_ref()
+                //     .is_some_and(|start| start.0 == identifier.name && !start.0.is_empty());
+                // if starts {
+                //     // create textedit
+                // } else if starting.is_some() && !starts {
+                //     // TODO: it failed, ignore
+                // }
             }
         }
         for file in self.variables.iter() {
@@ -641,6 +695,7 @@ impl LspFiles {
         &self,
         mut prefix: String,
         range: Range,
+        start_point: Position,
         _: Option<String>,
     ) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
@@ -663,11 +718,26 @@ impl LspFiles {
             parts.next();
             let label = parts.next()?.replacen('/', "", 1);
             let new_text = format!("\"{label}\"");
+            let mut additional_text_edits = None;
             let text_edit = {
                 if self.is_vscode {
-                    None
+                    let vec = vec![];
+                    let mut edits = vec;
+                    edits.push(TextEdit { range, new_text });
+                    additional_text_edits = Some(edits);
+                    Some(CompletionTextEdit::Edit(TextEdit {
+                        range: Range {
+                            start: start_point,
+                            end: start_point,
+                        },
+                        new_text: "".to_string(),
+                    }))
                 } else {
-                    Some(CompletionTextEdit::Edit(TextEdit::new(range, new_text)))
+                    Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                        new_text,
+                        insert: range,
+                        replace: range,
+                    }))
                 }
             };
             let item = CompletionItem {
@@ -675,6 +745,7 @@ impl LspFiles {
                 detail: Some("Jinja template".to_string()),
                 kind: Some(CompletionItemKind::FILE),
                 text_edit,
+                additional_text_edits,
                 ..Default::default()
             };
             abc.push(item);
@@ -683,14 +754,23 @@ impl LspFiles {
         Some(abc)
     }
 
-    pub fn get_variable(&self, prefix: String, id: String) -> Option<String> {
+    pub fn get_variable(&self, prefix: String, id: String, file_name: &str) -> Option<Vec<String>> {
+        let mut v = vec![];
         let variables = self.variables.get(&id)?;
         for variable in variables {
             if variable.name.contains(&prefix) {
-                return Some(variable.name.to_string());
+                v.push(variable.name.to_string());
             }
         }
-        None
+        let temp = vec![];
+        let variables = self.variables.get(file_name).unwrap_or(&temp);
+        let mut items: Vec<String> = variables
+            .iter()
+            .filter(|item| item.name.contains(&prefix))
+            .map(|item| item.name.to_string())
+            .collect();
+        v.append(&mut items);
+        Some(v)
     }
 
     pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {
@@ -726,6 +806,23 @@ impl LspFiles {
         );
         let objects = objects.show();
         Some(objects)
+    }
+
+    pub fn read_python_ids(&self, uri: Url) -> Option<Vec<PythonIdentifier>> {
+        let rope = self.documents.get(uri.as_str())?;
+        let mut writter = FileContent::default();
+        let _ = rope.write_to(&mut writter);
+        let content = writter.content;
+        let lang_type = self.config.file_ext(&Path::new(uri.as_str()))?;
+        let trees = self.trees.get(&lang_type)?;
+        let tree = trees.get(uri.as_str())?;
+        Some(python_identifiers(
+            &self.queries.python_identifiers,
+            tree,
+            Point::new(0, 0),
+            &content,
+            0,
+        ))
     }
 
     pub fn data_type(&self, uri: Url, hover: Identifier) -> Option<IdentifierType> {

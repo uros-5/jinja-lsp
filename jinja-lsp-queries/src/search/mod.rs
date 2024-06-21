@@ -5,7 +5,7 @@ use self::objects::JinjaObject;
 
 pub mod definition;
 pub mod objects;
-mod python_identifiers;
+pub mod python_identifiers;
 pub mod queries;
 pub mod rust_identifiers;
 pub mod rust_template_completion;
@@ -53,14 +53,21 @@ impl From<&JinjaObject> for Identifier {
     }
 }
 
-pub fn completion_start(trigger_point: Point, identifier: &Identifier) -> Option<&str> {
+pub fn completion_start(mut trigger_point: Point, identifier: &Identifier) -> Option<&str> {
+    if trigger_point.column > 0 {
+        trigger_point.column -= 1;
+    }
     let len = identifier.name.len();
+    if len == 0 {
+        return Some("");
+    }
     let diff = identifier.end.column - trigger_point.column;
     if diff == 0 || diff == 1 {
         return Some(&identifier.name);
     }
     if diff > len {
-        return None;
+        return Some(&identifier.name);
+        // return None;
     }
     let to = len - diff;
     let s = identifier.name.get(0..to + 1);
@@ -70,6 +77,16 @@ pub fn to_range(points: (Point, Point)) -> Range {
     let start = Position::new(points.0.row as u32, points.0.column as u32);
     let end = Position::new(points.1.row as u32, points.1.column as u32);
     Range::new(start, end)
+}
+
+pub fn to_point(position: Position) -> Point {
+    Point::new(position.line as usize, position.character as usize)
+}
+
+pub fn to_range2(range: Range, point: Point) -> bool {
+    let start = to_point(range.start);
+    let end = to_point(range.end);
+    point >= start && point <= end
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

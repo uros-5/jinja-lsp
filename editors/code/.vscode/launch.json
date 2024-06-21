@@ -15,7 +15,7 @@
       ],
       "preLaunchTask": {
         "type": "npm",
-        "script": "watch"
+        "script": "esbuild"
       },
       "env": {
         "SERVER_PATH": "/home/uros/.cache/cargo/target/debug/jinja-lsp"

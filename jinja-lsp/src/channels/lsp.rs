@@ -157,7 +157,7 @@ pub fn lsp_task(
                     let mut items = None;
 
                     if let Some(completion) = completion {
-                        match completion {
+                        match completion.0 {
                             CompletionType::Filter => {
                                 let completions = filters.clone();
                                 let mut ret = Vec::with_capacity(completions.len());
@@ -177,12 +177,15 @@ pub fn lsp_task(
                                 items = Some(CompletionResponse::Array(ret));
                             }
                             CompletionType::Identifier => {
-                                if let Some(variables) = lsp_data.read_variables(&uri, position) {
+                                if let Some(variables) =
+                                    lsp_data.read_variables(&uri, position, None)
+                                {
                                     items = Some(CompletionResponse::Array(variables));
                                 }
                             }
                             CompletionType::IncludedTemplate { name, range } => {
-                                if let Some(templates) = lsp_data.read_templates(name, range, None)
+                                if let Some(templates) =
+                                    lsp_data.read_templates(name, range, position, None)
                                 {
                                     items = Some(CompletionResponse::Array(templates));
                                 }
@@ -216,7 +219,14 @@ pub fn lsp_task(
                                     items = Some(CompletionResponse::Array(filtered));
                                 }
                             }
-                            CompletionType::IncompleteIdentifier { .. } => {}
+                            CompletionType::IncompleteIdentifier { name, range } => {
+                                if let Some(variables) =
+                                    lsp_data.read_variables(&uri, position, Some((name, range)))
+                                {
+                                    items = Some(CompletionResponse::Array(variables));
+                                }
+                            }
+                            CompletionType::IncompleteFilter { .. } => {}
                         };
                     }
                     let _ = sender.send(items);

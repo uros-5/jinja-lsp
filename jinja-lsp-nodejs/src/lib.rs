@@ -10,6 +10,7 @@ use jinja_lsp_queries::{
   parsers::Parsers,
   search::{
     objects::{objects_query, CompletionType, JinjaObject},
+    python_identifiers::PythonIdentifier,
     queries::Queries,
     snippets_completion::snippets,
     Identifier, IdentifierType,
@@ -59,8 +60,11 @@ pub struct NodejsLspFiles {
 impl NodejsLspFiles {
   #[napi(constructor)]
   pub fn new() -> Self {
+    let mut lsp_files2 = LspFiles::default();
+    lsp_files2.parsers.update_backend("python");
+    lsp_files2.queries.update_backend("python");
     Self {
-      lsp_files: LspFiles::default(),
+      lsp_files: lsp_files2,
       counter: 0,
       filters: init_filter_completions(),
       _snippets: snippets(),
@@ -102,43 +106,77 @@ impl NodejsLspFiles {
     filename: String,
     content: String,
     line: u32,
+    ext: String,
   ) -> Vec<JsIdentifier> {
     let mut all_identifiers = vec![];
     let params: DidOpenTextDocumentParams = DidOpenTextDocumentParams {
       text_document: TextDocumentItem::new(
-        Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap(),
+        Url::parse(&format!("file:///home/{filename}.{id}.{ext}")).unwrap(),
         String::new(),
         0,
         content,
       ),
     };
     self.lsp_files.did_open(params);
-    let objects = self
-      .lsp_files
-      .read_objects(Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap());
-    if let Some(objects) = objects {
-      if let Some(global_actions) = self.action_objects.get(&filename.to_string()) {
-        for obj in &objects {
-          let action_object = ActionObject::from(obj);
-          for global_action in global_actions {
-            if global_action.compare(&action_object.fields) {
-              let mut start = JsPosition::from(obj.location.0);
-              let mut end = JsPosition::from(obj.last_field_end());
-              start.line += line;
-              end.line += line;
-              let identifier = JsIdentifier {
-                start,
-                end,
-                name: obj.name.to_owned(),
-                identifier_type: JsIdentifierType::Link,
-                error: None,
-              };
-              all_identifiers.push(identifier);
+    match ext.as_str() {
+      "jinja" => {
+        let objects = self
+          .lsp_files
+          .read_objects(Url::parse(&format!("file:///home/{filename}.{id}.{ext}")).unwrap());
+        if let Some(objects) = objects {
+          if let Some(global_actions) = self.action_objects.get(&filename.to_string()) {
+            for obj in &objects {
+              let action_object = ActionObject::from(obj);
+              for global_action in global_actions {
+                if global_action.compare(&action_object.fields) {
+                  let mut start = JsPosition::from(obj.location.0);
+                  let mut end = JsPosition::from(obj.last_field_end());
+                  start.line += line;
+                  end.line += line;
+                  let identifier = JsIdentifier {
+                    start,
+                    end,
+                    name: obj.name.to_owned(),
+                    identifier_type: JsIdentifierType::Link,
+                    error: None,
+                  };
+                  all_identifiers.push(identifier);
+                }
+              }
             }
           }
         }
       }
-    }
+      "py" => {
+        if let Some(ids) = self
+          .lsp_files
+          .read_python_ids(Url::parse(&format!("file:///home/{filename}.{id}.{ext}")).unwrap())
+        {
+          if let Some(global_actions) = self.action_objects.get(&filename.to_string()) {
+            for obj in &ids {
+              let action_object = ActionObject::from(obj);
+              for global_action in global_actions {
+                if global_action.compare(&action_object.fields) {
+                  let mut start = JsPosition::from(obj.start);
+                  let mut end = JsPosition::from(obj.end);
+                  start.line += line;
+                  end.line += line;
+                  let identifier = JsIdentifier {
+                    start,
+                    end,
+                    name: obj.field.to_owned(),
+                    identifier_type: JsIdentifierType::Link,
+                    error: None,
+                  };
+                  all_identifiers.push(identifier);
+                }
+              }
+            }
+          }
+        }
+      }
+      _ => (),
+    };
     // let query = &self.lsp_files.queries.jinja_objects;
     // let objects = objects_query(query, &tree, Point::new(0, 0), &content, true);
     // let objects = objects.show();
@@ -292,7 +330,7 @@ impl NodejsLspFiles {
     let completion = self.lsp_files.completion(params)?;
     let mut items = None;
 
-    match completion {
+    match completion.0 {
       CompletionType::Filter => {
         let completions = self.filters.clone();
         let mut ret = Vec::with_capacity(completions.len());
@@ -309,8 +347,9 @@ impl NodejsLspFiles {
         }
         items = Some(ret);
       }
+
       CompletionType::Identifier => {
-        if let Some(variables) = self.lsp_files.read_variables(&uri, position) {
+        if let Some(variables) = self.lsp_files.read_variables(&uri, position, None) {
           let mut ret = vec![];
           for item in variables {
             ret.push(JsCompletionItem {
@@ -353,18 +392,25 @@ impl NodejsLspFiles {
       CompletionType::IncompleteIdentifier { name, mut range } => {
         range.start.line += line;
         range.end.line += line;
-        let variable = self.lsp_files.get_variable(name, uri.to_string())?;
-        let ret = vec![JsCompletionItem {
-          completion_type: JsCompletionType::Identifier,
-          label: variable.to_string(),
-          kind: Kind2::VARIABLE,
-          description: variable.to_string(),
-          new_text: Some(variable),
-          insert: Some(JsRange::from(&range)),
-          replace: Some(JsRange::from(&range)),
-        }];
+        let mut ret = vec![];
+        let variables = self
+          .lsp_files
+          .get_variable(name, uri.to_string(), &filename)?;
+        for variable in variables {
+          let item = JsCompletionItem {
+            completion_type: JsCompletionType::Identifier,
+            label: variable.to_string(),
+            kind: Kind2::VARIABLE,
+            description: variable.to_string(),
+            new_text: Some(variable),
+            insert: Some(JsRange::from(&range)),
+            replace: Some(JsRange::from(&range)),
+          };
+          ret.push(item);
+        }
         items = Some(ret);
       }
+      CompletionType::IncompleteFilter { .. } => {}
     };
     items
   }
@@ -626,6 +672,19 @@ impl From<&JinjaObject> for ActionObject {
     for field in &value.fields {
       fields.push(field.0.to_owned());
     }
+    Self { fields }
+  }
+}
+
+impl From<&PythonIdentifier> for ActionObject {
+  fn from(value: &PythonIdentifier) -> Self {
+    let mut fields = vec![];
+    let parts = value.field.split('.');
+    for field in parts {
+      fields.push(field.to_string());
+    }
+    // fields.push(value.name.to_owned());
+    // for field in &value.fields {}
     Self { fields }
   }
 }

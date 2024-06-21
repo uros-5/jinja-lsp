@@ -633,37 +633,35 @@ impl LspFiles {
                     kind: Some(identifier.identifier_type.completion_kind()),
                     ..Default::default() // detail: Some()
                 };
-                if &start_item == "" {
+                if start_item.is_empty() {
                     items.push(completion_item);
-                } else {
-                    if identifier.name.starts_with(&start_item) {
-                        let mut additional_text_edits = None;
-                        let text_edit = if self.is_vscode {
-                            let vec = vec![];
-                            let mut edits = vec;
-                            edits.push(TextEdit {
-                                range: incomplete_range,
-                                new_text: start_item.to_string(),
-                            });
-                            additional_text_edits = Some(edits);
-                            CompletionTextEdit::Edit(TextEdit {
-                                range: Range {
-                                    start: incomplete_range.start,
-                                    end: incomplete_range.start,
-                                },
-                                new_text: "".to_string(),
-                            })
-                        } else {
-                            CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
-                                new_text: identifier.name.to_string(),
-                                insert: incomplete_range,
-                                replace: incomplete_range,
-                            })
-                        };
-                        completion_item.text_edit = Some(text_edit);
-                        completion_item.additional_text_edits = additional_text_edits;
-                        items.push(completion_item);
-                    }
+                } else if identifier.name.starts_with(&start_item) {
+                    let mut additional_text_edits = None;
+                    let text_edit = if self.is_vscode {
+                        let vec = vec![];
+                        let mut edits = vec;
+                        edits.push(TextEdit {
+                            range: incomplete_range,
+                            new_text: start_item.to_string(),
+                        });
+                        additional_text_edits = Some(edits);
+                        CompletionTextEdit::Edit(TextEdit {
+                            range: Range {
+                                start: incomplete_range.start,
+                                end: incomplete_range.start,
+                            },
+                            new_text: "".to_string(),
+                        })
+                    } else {
+                        CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                            new_text: identifier.name.to_string(),
+                            insert: incomplete_range,
+                            replace: incomplete_range,
+                        })
+                    };
+                    completion_item.text_edit = Some(text_edit);
+                    completion_item.additional_text_edits = additional_text_edits;
+                    items.push(completion_item);
                 }
 
                 // let starts = starting
@@ -773,7 +771,11 @@ impl LspFiles {
         Some(v)
     }
 
-    pub fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Option<DiagnosticMessage> {
+    pub fn did_open(
+        &mut self,
+        params: DidOpenTextDocumentParams,
+        ignore: bool,
+    ) -> Option<DiagnosticMessage> {
         let name = params.text_document.uri.as_str();
         let lang_type = self.config.file_ext(&Path::new(name))?;
         let file_content = params.text_document.text;
@@ -782,8 +784,11 @@ impl LspFiles {
         self.documents.insert(name.to_string(), rope);
         self.add_tree(name, lang_type, &file_content);
         self.add_variables(name, lang_type, &file_content);
-        let diagnostics = self.read_tree(name)?;
         let mut hm = HashMap::new();
+        if ignore {
+            return Some(DiagnosticMessage::Errors(hm));
+        }
+        let diagnostics = self.read_tree(name)?;
         hm.insert(name.to_owned(), diagnostics);
         let msg = DiagnosticMessage::Errors(hm);
         Some(msg)

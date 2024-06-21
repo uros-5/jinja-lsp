@@ -117,7 +117,7 @@ impl NodejsLspFiles {
         content,
       ),
     };
-    self.lsp_files.did_open(params);
+    self.lsp_files.did_open(params, true);
     match ext.as_str() {
       "jinja" => {
         let objects = self

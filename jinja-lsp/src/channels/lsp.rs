@@ -299,7 +299,7 @@ pub fn lsp_task(
                     }
                 }
                 LspMessage::DidOpen(params) => {
-                    if let Some(errors) = lsp_data.did_open(params) {
+                    if let Some(errors) = lsp_data.did_open(params, false) {
                         let _ = diagnostics_channel.send(errors).await;
                     }
                 }

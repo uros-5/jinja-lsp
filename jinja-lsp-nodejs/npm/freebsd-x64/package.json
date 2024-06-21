@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-freebsd-x64",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "os": [
     "freebsd"
   ],

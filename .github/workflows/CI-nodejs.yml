@@ -9,7 +9,7 @@ permissions:
 'on':
   push:
     branches:
-      - completion-fix
+      - warnings
     tags-ignore:
       - '**'
     paths-ignore:

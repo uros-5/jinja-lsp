@@ -13,9 +13,9 @@ crate-type = ["cdylib"]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
 napi = { version = "2.12.2", default-features = false, features = ["napi4"] }
 napi-derive = "2.12.2"
-jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.80"}
-jinja-lsp = { path = "../jinja-lsp", version = "0.1.80"}
-tree-sitter = "0.21.0"
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.81"}
+jinja-lsp = { path = "../jinja-lsp", version = "0.1.81"}
+tree-sitter = "0.22.6"
 tower-lsp = { version = "0.20.0", features = ["proposed"] }
 ropey = "1.5.0"
 

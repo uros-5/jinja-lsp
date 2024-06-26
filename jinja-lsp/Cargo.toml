@@ -26,9 +26,9 @@ serde_json = "1.0.78"
 tokio = { version = "1.17.0", features = ["full"] }
 tower-lsp = { version = "0.20.0", features = ["proposed"]}
 serde = { version = "1.0", features = ["derive"] }
-tree-sitter = "^0.21.0"
+tree-sitter = "^0.22.6"
 walkdir = "2.4.0"
 anyhow = "1.0.75"
-tree-sitter-jinja2 = "0.0.7"
-tree-sitter-rust = "^0.21.0"
-jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.80"}
+tree-sitter-jinja2 = "0.0.8"
+tree-sitter-rust = "^0.21.2"
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.81"}

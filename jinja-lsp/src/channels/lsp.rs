@@ -178,7 +178,7 @@ pub fn lsp_task(
                             }
                             CompletionType::Identifier => {
                                 if let Some(variables) =
-                                    lsp_data.read_variables(&uri, position, None)
+                                    lsp_data.read_variables(&uri, position, None, None)
                                 {
                                     items = Some(CompletionResponse::Array(variables));
                                 }
@@ -220,9 +220,12 @@ pub fn lsp_task(
                                 }
                             }
                             CompletionType::IncompleteIdentifier { name, range } => {
-                                if let Some(variables) =
-                                    lsp_data.read_variables(&uri, position, Some((name, range)))
-                                {
+                                if let Some(variables) = lsp_data.read_variables(
+                                    &uri,
+                                    position,
+                                    Some((name, range)),
+                                    None,
+                                ) {
                                     items = Some(CompletionResponse::Array(variables));
                                 }
                             }

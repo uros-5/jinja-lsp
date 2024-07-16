@@ -309,6 +309,7 @@ impl NodejsLspFiles {
     mut position: JsPosition,
   ) -> Option<Vec<JsCompletionItem>> {
     position.line -= line;
+    let original_uri = &format!("{filename}");
     let uri = Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap();
     let position = Position::new(position.line, position.character);
     let params: CompletionParams = CompletionParams {
@@ -349,7 +350,11 @@ impl NodejsLspFiles {
       }
 
       CompletionType::Identifier => {
-        if let Some(variables) = self.lsp_files.read_variables(&uri, position, None) {
+        if let Some(variables) =
+          self
+            .lsp_files
+            .read_variables(&uri, position, None, Some(original_uri.to_string()))
+        {
           let mut ret = vec![];
           for item in variables {
             ret.push(JsCompletionItem {

@@ -604,6 +604,7 @@ impl LspFiles {
         uri: &Url,
         position: Position,
         starting: Option<(String, Range)>,
+        nodejs_uri: Option<String>,
     ) -> Option<Vec<CompletionItem>> {
         let mut items = vec![];
         let start = position.line as usize;
@@ -674,7 +675,12 @@ impl LspFiles {
                 // }
             }
         }
+        let is_nodejs = nodejs_uri.is_some();
+        let uri = nodejs_uri.unwrap_or(String::new());
         for file in self.variables.iter() {
+            if is_nodejs && file.0 != &uri {
+                continue;
+            }
             for variable in file.1 {
                 if variable.identifier_type == IdentifierType::BackendVariable {
                     items.push(CompletionItem {

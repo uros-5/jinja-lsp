@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-linux-arm-gnueabihf",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "os": [
     "linux"
   ],

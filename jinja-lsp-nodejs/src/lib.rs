@@ -104,10 +104,18 @@ impl NodejsLspFiles {
     &mut self,
     id: u32,
     filename: String,
-    content: String,
+    mut content: String,
     line: u32,
     ext: String,
+    col: Option<u32>,
+    // is_json: bool,
   ) -> Vec<JsIdentifier> {
+    let col = col.unwrap_or(0);
+    let mut space_before = String::new();
+    for _ in 0..col {
+      space_before.push_str(" ");
+    }
+    content = format!("{space_before}{content}");
     let mut all_identifiers = vec![];
     let params: DidOpenTextDocumentParams = DidOpenTextDocumentParams {
       text_document: TextDocumentItem::new(

@@ -104,10 +104,18 @@ impl NodejsLspFiles {
     &mut self,
     id: u32,
     filename: String,
-    content: String,
+    mut content: String,
     line: u32,
     ext: String,
+    col: Option<u32>,
+    // is_json: bool,
   ) -> Vec<JsIdentifier> {
+    let col = col.unwrap_or(0);
+    let mut space_before = String::new();
+    for _ in 0..col {
+      space_before.push_str(" ");
+    }
+    content = format!("{space_before}{content}");
     let mut all_identifiers = vec![];
     let params: DidOpenTextDocumentParams = DidOpenTextDocumentParams {
       text_document: TextDocumentItem::new(
@@ -309,6 +317,7 @@ impl NodejsLspFiles {
     mut position: JsPosition,
   ) -> Option<Vec<JsCompletionItem>> {
     position.line -= line;
+    let original_uri = &format!("{filename}");
     let uri = Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap();
     let position = Position::new(position.line, position.character);
     let params: CompletionParams = CompletionParams {
@@ -349,7 +358,11 @@ impl NodejsLspFiles {
       }
 
       CompletionType::Identifier => {
-        if let Some(variables) = self.lsp_files.read_variables(&uri, position, None) {
+        if let Some(variables) =
+          self
+            .lsp_files
+            .read_variables(&uri, position, None, Some(original_uri.to_string()))
+        {
           let mut ret = vec![];
           for item in variables {
             ret.push(JsCompletionItem {

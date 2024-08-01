@@ -78,7 +78,7 @@ export class NodejsLspFiles {
   /** Actions can come from unsaved context. */
   addGlobalContext(uri: string, actions?: Array<Action> | undefined | null): void
   deleteAll(filename: string): void
-  addOne(id: number, filename: string, content: string, line: number, ext: string): Array<JsIdentifier>
+  addOne(id: number, filename: string, content: string, line: number, ext: string, col?: number | undefined | null): Array<JsIdentifier>
   getVariables(id: string, line: number): Array<JsIdentifier> | null
   hover(id: number, filename: string, line: number, position: JsPosition): JsHover | null
   complete(id: number, filename: string, line: number, position: JsPosition): Array<JsCompletionItem> | null

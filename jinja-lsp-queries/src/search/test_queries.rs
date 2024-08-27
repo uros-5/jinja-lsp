@@ -16,7 +16,7 @@ mod query_tests {
     };
 
     fn prepare_jinja_tree(text: &str) -> tree_sitter::Tree {
-        let language = tree_sitter_jinja2::language();
+        let language = tree_sitter_jinja2::LANGUAGE.into();
         let mut parser = Parser::new();
 
         parser
@@ -38,7 +38,7 @@ mod query_tests {
     }
 
     fn prepare_python_tree(text: &str) -> tree_sitter::Tree {
-        let language = tree_sitter_python::language();
+        let language = tree_sitter_python::LANGUAGE.into();
         let mut parser = Parser::new();
 
         parser

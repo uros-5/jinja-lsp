@@ -7,9 +7,9 @@ license = "MIT"
 
 [dependencies]
 tree-sitter = "0.23.0"
-tree-sitter-jinja2 = "0.0.8"
+tree-sitter-jinja2 = "0.0.9"
 tree-sitter-rust = "0.21.2"
 tower-lsp = { version = "0.20.0", features = ["proposed"] }
 ropey = "1.5.0"
-tree-sitter-python = "=0.21.0"
+tree-sitter-python = "=0.23.0"
 

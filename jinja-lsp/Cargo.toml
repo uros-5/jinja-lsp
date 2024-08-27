@@ -29,6 +29,6 @@ serde = { version = "1.0", features = ["derive"] }
 tree-sitter = "^0.23.0"
 walkdir = "2.4.0"
 anyhow = "1.0.75"
-tree-sitter-jinja2 = "0.0.8"
+tree-sitter-jinja2 = "0.0.9"
 tree-sitter-rust = "^0.21.2"
 jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.81"}

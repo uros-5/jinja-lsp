@@ -676,7 +676,7 @@ impl LspFiles {
             }
         }
         let is_nodejs = nodejs_uri.is_some();
-        let uri = nodejs_uri.unwrap_or(String::new());
+        let uri = nodejs_uri.unwrap_or_default();
         for file in self.variables.iter() {
             if is_nodejs && file.0 != &uri {
                 continue;

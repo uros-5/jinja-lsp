@@ -12,4 +12,5 @@ tree-sitter-rust = "0.21.2"
 tower-lsp = { version = "0.20.0", features = ["proposed"] }
 ropey = "1.5.0"
 tree-sitter-python = "=0.23.0"
+tree-sitter-language = "0.1.0"
 

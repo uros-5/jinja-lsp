@@ -106,9 +106,12 @@ checksum = "514de17de45fdb8dc022b1a7975556c53c86f9f0aa5f534b98977b171857c2c9"
 
 [[package]]
 name = "cc"
-version = "1.0.100"
+version = "1.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c891175c3fb232128f48de6590095e59198bbeb8620c310be349bfc3afd12c7b"
+checksum = "57b6a275aa2903740dc87da01c62040406b8812552e97129a63ea8850a17c6e6"
+dependencies = [
+ "shlex",
+]
 
 [[package]]
 name = "cfg-if"
@@ -304,7 +307,7 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jinja-lsp"
-version = "0.1.81"
+version = "0.1.82"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -316,13 +319,14 @@ dependencies = [
  "tower-lsp",
  "tree-sitter",
  "tree-sitter-jinja2",
+ "tree-sitter-language",
  "tree-sitter-rust",
  "walkdir",
 ]
 
 [[package]]
 name = "jinja-lsp-nodejs"
-version = "0.1.80"
+version = "0.1.82"
 dependencies = [
  "jinja-lsp",
  "jinja-lsp-queries",
@@ -332,16 +336,18 @@ dependencies = [
  "ropey",
  "tower-lsp",
  "tree-sitter",
+ "tree-sitter-language",
 ]
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.81"
+version = "0.1.82"
 dependencies = [
  "ropey",
  "tower-lsp",
  "tree-sitter",
  "tree-sitter-jinja2",
+ "tree-sitter-language",
  "tree-sitter-python",
  "tree-sitter-rust",
 ]
@@ -589,9 +595,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.5"
+version = "1.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
+checksum = "4219d74c6b67a3654a9fbebc4b419e22126d13d2f3c4a07ee0cb61ff79a79619"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -700,6 +706,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "shlex"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "signal-hook-registry"
@@ -912,32 +924,40 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
-version = "0.22.6"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df7cc499ceadd4dcdf7ec6d4cbc34ece92c3fa07821e287aedecd4416c516dca"
+checksum = "20f4cd3642c47a85052a887d86704f4eac272969f61b686bdd3f772122aabaff"
 dependencies = [
  "cc",
  "regex",
+ "regex-syntax",
+ "tree-sitter-language",
 ]
 
 [[package]]
 name = "tree-sitter-jinja2"
-version = "0.0.8"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bc41011810e93f88f0448c6df7e8d9f7c1d7ebedb6c907ef07774c0c40c4eb3"
+checksum = "d49f237afb55b813c3cbd7ec9d794f1af4b0efd45ce696ce52ec33d8ca238ed5"
 dependencies = [
  "cc",
- "tree-sitter",
+ "tree-sitter-language",
 ]
 
 [[package]]
-name = "tree-sitter-python"
-version = "0.21.0"
+name = "tree-sitter-language"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4066c6cf678f962f8c2c4561f205945c84834cce73d981e71392624fdc390a9"
+checksum = "2545046bd1473dac6c626659cc2567c6c0ff302fc8b84a56c4243378276f7f57"
+
+[[package]]
+name = "tree-sitter-python"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b02aca0753757b405a3dd55066b707d6106de86cc5070355ea778848fde510f"
 dependencies = [
  "cc",
- "tree-sitter",
+ "tree-sitter-language",
 ]
 
 [[package]]

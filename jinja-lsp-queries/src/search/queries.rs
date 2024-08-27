@@ -20,15 +20,20 @@ impl Clone for Queries {
 impl Default for Queries {
     fn default() -> Self {
         Self {
-            jinja_definitions: Query::new(&tree_sitter_jinja2::language(), DEFINITIONS).unwrap(),
-            jinja_objects: Query::new(&tree_sitter_jinja2::language(), OBJECTS).unwrap(),
+            jinja_definitions: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), DEFINITIONS)
+                .unwrap(),
+            jinja_objects: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), OBJECTS).unwrap(),
             backend_definitions: Query::new(&tree_sitter_rust::language(), RUST_DEFINITIONS)
                 .unwrap(),
-            jinja_imports: Query::new(&tree_sitter_jinja2::language(), JINJA_IMPORTS).unwrap(),
+            jinja_imports: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_IMPORTS).unwrap(),
             backend_templates: Query::new(&tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
-            jinja_snippets: Query::new(&tree_sitter_jinja2::language(), JINJA_SNIPPETS).unwrap(),
-            python_identifiers: Query::new(&tree_sitter_python::language(), PYTHON_IDENTIFIERS)
+            jinja_snippets: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_SNIPPETS)
                 .unwrap(),
+            python_identifiers: Query::new(
+                &tree_sitter_python::LANGUAGE.into(),
+                PYTHON_IDENTIFIERS,
+            )
+            .unwrap(),
         }
     }
 }
@@ -37,11 +42,11 @@ impl Queries {
     pub fn update_backend(&mut self, lang: &str) {
         if lang == "python" {
             self.backend_templates =
-                Query::new(&tree_sitter_python::language(), PYTHON_TEMPLATES).unwrap();
+                Query::new(&tree_sitter_python::LANGUAGE.into(), PYTHON_TEMPLATES).unwrap();
             self.backend_definitions =
-                Query::new(&tree_sitter_python::language(), PYTHON_DEFINITIONS).unwrap();
+                Query::new(&tree_sitter_python::LANGUAGE.into(), PYTHON_DEFINITIONS).unwrap();
             self.python_identifiers =
-                Query::new(&tree_sitter_python::language(), PYTHON_IDENTIFIERS).unwrap();
+                Query::new(&tree_sitter_python::LANGUAGE.into(), PYTHON_IDENTIFIERS).unwrap();
         }
     }
 }

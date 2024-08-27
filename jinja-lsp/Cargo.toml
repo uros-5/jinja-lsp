@@ -32,3 +32,4 @@ anyhow = "1.0.75"
 tree-sitter-jinja2 = "0.0.9"
 tree-sitter-rust = "^0.21.2"
 jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.81"}
+tree-sitter-language = "0.1.0"

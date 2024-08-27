@@ -23,7 +23,9 @@ impl Parsers {
     pub fn update_backend(&mut self, lang: &str) {
         if lang == "python" {
             self.backend = Parser::new();
-            let _ = self.backend.set_language(&tree_sitter_python::language());
+            let _ = self
+                .backend
+                .set_language(&tree_sitter_python::LANGUAGE.into());
         }
     }
 }
@@ -31,7 +33,7 @@ impl Parsers {
 impl Default for Parsers {
     fn default() -> Self {
         let mut jinja = Parser::new();
-        let _ = jinja.set_language(&tree_sitter_jinja2::language());
+        let _ = jinja.set_language(&tree_sitter_jinja2::LANGUAGE.into());
         let mut backend = Parser::new();
         let _ = backend.set_language(&tree_sitter_rust::language());
         Self { jinja, backend }

@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-linux-x64-musl",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "os": [
     "linux"
   ],

@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-linux-arm-musleabihf",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "os": [
     "linux"
   ],

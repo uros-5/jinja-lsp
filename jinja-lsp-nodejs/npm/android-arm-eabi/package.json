@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-android-arm-eabi",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "os": [
     "android"
   ],

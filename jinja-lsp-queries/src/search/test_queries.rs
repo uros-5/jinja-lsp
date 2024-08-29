@@ -287,6 +287,10 @@ mod query_tests {
                     false,
                 )),
             ),
+            (
+                Point::new(11, 14),
+                Some((CompletionType::Identifier, false)),
+            ),
         ];
         for case in cases {
             let tree = prepare_jinja_tree(source);

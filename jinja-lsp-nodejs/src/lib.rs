@@ -113,7 +113,7 @@ impl NodejsLspFiles {
     let col = col.unwrap_or(0);
     let mut space_before = String::new();
     for _ in 0..col {
-      space_before.push_str(" ");
+      space_before.push(' ');
     }
     content = format!("{space_before}{content}");
     let mut all_identifiers = vec![];
@@ -317,7 +317,7 @@ impl NodejsLspFiles {
     mut position: JsPosition,
   ) -> Option<Vec<JsCompletionItem>> {
     position.line -= line;
-    let original_uri = &format!("{filename}");
+    let original_uri = filename.to_string();
     let uri = Url::parse(&format!("file:///home/{filename}.{id}.jinja")).unwrap();
     let position = Position::new(position.line, position.character);
     let params: CompletionParams = CompletionParams {
@@ -333,7 +333,7 @@ impl NodejsLspFiles {
       },
       context: Some(CompletionContext {
         trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
-        trigger_character: None,
+        trigger_character: Some(String::from("{")),
       }),
     };
     let completion = self.lsp_files.completion(params)?;

@@ -243,7 +243,8 @@ pub fn objects_query(
                     break 'loop1;
                 }
             } else if smaller {
-                if objects.is_filter() {
+                let name = capture_names[capture.index as usize];
+                if objects.is_filter() || name == "expr" {
                     break 'loop1;
                 } else if !continued {
                     if objects.is_hover(trigger_point) {

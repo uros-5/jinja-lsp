@@ -903,6 +903,9 @@ impl LspFiles {
         for i in ids {
             self.documents.remove(&i);
             self.variables.remove(&i);
+            if let Some(templates) = self.trees.get_mut(&LangType::Template) {
+                templates.remove(&i);
+            }
         }
     }
 }

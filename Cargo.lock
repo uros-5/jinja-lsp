@@ -936,9 +936,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-jinja2"
-version = "0.0.9"
+version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d49f237afb55b813c3cbd7ec9d794f1af4b0efd45ce696ce52ec33d8ca238ed5"
+checksum = "7716aece9650307e40c6409cb214e263fe32c439a1e7dcb0d06ba06515488f0a"
 dependencies = [
  "cc",
  "tree-sitter-language",

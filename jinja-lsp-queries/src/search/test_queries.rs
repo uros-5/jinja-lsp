@@ -199,7 +199,7 @@ mod query_tests {
             {{ }}
             {{ "|" }}
             {{ identifier }}
-            {{}}
+            {{}}    
             {{ identifier }}
         "#;
         let cases = [
@@ -291,6 +291,7 @@ mod query_tests {
                 Point::new(11, 14),
                 Some((CompletionType::Identifier, false)),
             ),
+            (Point::new(11, 19), None),
         ];
         for case in cases {
             let tree = prepare_jinja_tree(source);

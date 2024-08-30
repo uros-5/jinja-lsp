@@ -173,8 +173,13 @@ impl JinjaObjects {
     }
 
     pub fn in_expr(&self, trigger_point: Point) -> bool {
-        trigger_point >= self.expr.0 && trigger_point <= self.expr.1 && trigger_point > self.ident.0
-            || self.expr.2.begin.1 == self.expr.2.end.0
+        let in_expr = trigger_point >= self.expr.0 && trigger_point <= self.expr.1;
+        let after_ident = trigger_point > self.ident.0;
+        let no_ident = self.expr.2.begin.1 == self.expr.2.end.0;
+        if !in_expr {
+            return false;
+        }
+        in_expr && after_ident || no_ident
     }
 
     pub fn should_autoclose(&self) -> bool {

@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {

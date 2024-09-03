@@ -27,7 +27,7 @@ mod query_tests {
     }
 
     fn prepare_rust_tree(text: &str) -> tree_sitter::Tree {
-        let language = tree_sitter_rust::language();
+        let language = tree_sitter_rust::LANGUAGE.into();
         let mut parser = Parser::new();
 
         parser

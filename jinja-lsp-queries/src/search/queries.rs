@@ -23,10 +23,11 @@ impl Default for Queries {
             jinja_definitions: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), DEFINITIONS)
                 .unwrap(),
             jinja_objects: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), OBJECTS).unwrap(),
-            backend_definitions: Query::new(&tree_sitter_rust::language(), RUST_DEFINITIONS)
+            backend_definitions: Query::new(&tree_sitter_rust::LANGUAGE.into(), RUST_DEFINITIONS)
                 .unwrap(),
             jinja_imports: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_IMPORTS).unwrap(),
-            backend_templates: Query::new(&tree_sitter_rust::language(), RUST_TEMPLATES).unwrap(),
+            backend_templates: Query::new(&tree_sitter_rust::LANGUAGE.into(), RUST_TEMPLATES)
+                .unwrap(),
             jinja_snippets: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_SNIPPETS)
                 .unwrap(),
             python_identifiers: Query::new(

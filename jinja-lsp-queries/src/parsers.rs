@@ -35,7 +35,7 @@ impl Default for Parsers {
         let mut jinja = Parser::new();
         let _ = jinja.set_language(&tree_sitter_jinja2::LANGUAGE.into());
         let mut backend = Parser::new();
-        let _ = backend.set_language(&tree_sitter_rust::language());
+        let _ = backend.set_language(&tree_sitter_rust::LANGUAGE.into());
         Self { jinja, backend }
     }
 }

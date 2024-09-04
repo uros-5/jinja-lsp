@@ -76,11 +76,11 @@ export interface Action {
 export class NodejsLspFiles {
   constructor()
   /** Actions can come from unsaved context. */
-  addGlobalContext(uri: string, actions?: Array<Action> | undefined | null): void
+  addLinkHints(uri: string, actions?: Array<Action> | undefined | null): void
   deleteAll(filename: string): void
   addOne(id: number, filename: string, content: string, line: number, ext: string, col?: number | undefined | null): Array<JsIdentifier>
   getVariables(id: string, line: number): Array<JsIdentifier> | null
   hover(id: number, filename: string, line: number, position: JsPosition): JsHover | null
-  complete(id: number, filename: string, line: number, position: JsPosition): Array<JsCompletionItem> | null
+  complete(id: number, filename: string, line: number, position: JsPosition, linkHints?: string | undefined | null): Array<JsCompletionItem> | null
   gotoDefinition(id: number, filename: string, line: number, position: JsPosition): Array<JsLocation> | null
 }

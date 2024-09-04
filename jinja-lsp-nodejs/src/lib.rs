@@ -75,7 +75,7 @@ impl NodejsLspFiles {
 
   /// Actions can come from unsaved context.
   #[napi]
-  pub fn add_global_context(&mut self, uri: String, actions: Option<Vec<Action>>) {
+  pub fn add_link_hints(&mut self, uri: String, actions: Option<Vec<Action>>) {
     if let Some(actions) = actions {
       let mut identifiers = vec![];
       let mut action_objects = vec![];
@@ -315,6 +315,7 @@ impl NodejsLspFiles {
     filename: String,
     line: u32,
     mut position: JsPosition,
+    link_hints: Option<String>,
   ) -> Option<Vec<JsCompletionItem>> {
     position.line -= line;
     let original_uri = filename.to_string();
@@ -358,10 +359,10 @@ impl NodejsLspFiles {
       }
 
       CompletionType::Identifier => {
-        if let Some(variables) =
-          self
-            .lsp_files
-            .read_variables(&uri, position, None, Some(original_uri.to_string()))
+        let url = link_hints.unwrap_or(original_uri.to_string());
+        if let Some(variables) = self
+          .lsp_files
+          .read_variables(&uri, position, None, Some(url))
         {
           let mut ret = vec![];
           for item in variables {

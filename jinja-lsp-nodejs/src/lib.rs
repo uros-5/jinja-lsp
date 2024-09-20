@@ -93,6 +93,36 @@ impl NodejsLspFiles {
   }
 
   #[napi]
+  pub fn save_link_hint(&mut self, actions: Option<Vec<Action>>, hint: Option<String>) {
+    let hint = hint.unwrap_or("temp".to_string());
+    if let Some(actions) = actions {
+      let mut identifiers = vec![];
+      let mut action_objects = vec![];
+      for action in &actions {
+        let mut identifier = Identifier::new(&action.name, Point::new(0, 0), Point::new(0, 0));
+        identifier.identifier_type = IdentifierType::BackendVariable;
+        identifiers.push(identifier);
+        let action = ActionObject::from(action);
+        action_objects.push(action);
+      }
+      self.action_objects.insert(hint.to_string(), action_objects);
+      self
+        .lsp_files
+        .variables
+        .insert(hint.to_string(), identifiers);
+      self.actions.insert(hint.to_string(), actions);
+    }
+  }
+
+  #[napi]
+  pub fn remove_temp_link_hint(&mut self, hint: Option<String>) {
+    let hint = hint.unwrap_or("temp".to_string());
+    self.lsp_files.variables.remove(&hint);
+    self.actions.remove(&hint);
+    self.action_objects.remove(&hint);
+  }
+
+  #[napi]
   pub fn delete_all(&mut self, filename: String) {
     self.lsp_files.delete_documents_with_id(filename);
     self.counter = 0;
@@ -132,7 +162,7 @@ impl NodejsLspFiles {
           .lsp_files
           .read_objects(Url::parse(&format!("file:///home/{filename}.{id}.{ext}")).unwrap());
         if let Some(objects) = objects {
-          if let Some(global_actions) = self.action_objects.get(&filename.to_string()) {
+          if let Some(global_actions) = self.action_objects.get("temp") {
             for obj in &objects {
               let action_object = ActionObject::from(obj);
               for global_action in global_actions {
@@ -160,7 +190,7 @@ impl NodejsLspFiles {
           .lsp_files
           .read_python_ids(Url::parse(&format!("file:///home/{filename}.{id}.{ext}")).unwrap())
         {
-          if let Some(global_actions) = self.action_objects.get(&filename.to_string()) {
+          if let Some(global_actions) = self.action_objects.get("temp") {
             for obj in &ids {
               let action_object = ActionObject::from(obj);
               for global_action in global_actions {
@@ -315,7 +345,6 @@ impl NodejsLspFiles {
     filename: String,
     line: u32,
     mut position: JsPosition,
-    link_hints: Option<String>,
   ) -> Option<Vec<JsCompletionItem>> {
     position.line -= line;
     let original_uri = filename.to_string();
@@ -359,12 +388,21 @@ impl NodejsLspFiles {
       }
 
       CompletionType::Identifier => {
-        let url = link_hints.unwrap_or(original_uri.to_string());
-        if let Some(variables) = self
-          .lsp_files
-          .read_variables(&uri, position, None, Some(url))
-        {
+        let empty = vec![];
+        let actions = self.actions.get("temp").unwrap_or(&empty);
+        if let Some(variables) = self.lsp_files.read_variables(&uri, position, None, None) {
           let mut ret = vec![];
+          for item in actions {
+            ret.push(JsCompletionItem {
+              completion_type: JsCompletionType::Identifier,
+              label: item.name.to_string(),
+              kind: Kind2::VARIABLE,
+              description: item.description.to_string(),
+              new_text: None,
+              insert: None,
+              replace: None,
+            });
+          }
           for item in variables {
             ret.push(JsCompletionItem {
               completion_type: JsCompletionType::Identifier,
@@ -376,6 +414,7 @@ impl NodejsLspFiles {
               replace: None,
             });
           }
+
           items = Some(ret);
         }
       }
@@ -406,10 +445,9 @@ impl NodejsLspFiles {
       CompletionType::IncompleteIdentifier { name, mut range } => {
         range.start.line += line;
         range.end.line += line;
+        let url = &original_uri.to_string();
         let mut ret = vec![];
-        let variables = self
-          .lsp_files
-          .get_variable(name, uri.to_string(), &filename)?;
+        let variables = self.lsp_files.get_variable(name, url.to_string(), "temp")?;
         for variable in variables {
           let item = JsCompletionItem {
             completion_type: JsCompletionType::Identifier,
@@ -465,9 +503,8 @@ impl NodejsLspFiles {
       }
       GotoDefinitionResponse::Array(locations) => {
         for mut location in locations {
-          print!("{}", location.uri);
           let uri2 = location.uri.to_string();
-          if uri2.contains(&filename) {
+          if uri2.contains("temp") {
             location.uri = Url::parse(&uri2).unwrap();
             location.range.start.line += line;
             location.range.end.line += line;
@@ -585,12 +622,14 @@ pub struct JsHover {
 }
 
 #[napi(object)]
+#[derive(Debug)]
 pub struct JsRange {
   pub start: JsPosition,
   pub end: JsPosition,
 }
 
 #[napi(object)]
+#[derive(Debug)]
 pub struct JsLocation {
   pub uri: String,
   pub range: JsRange,

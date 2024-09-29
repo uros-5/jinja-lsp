@@ -1,6 +1,6 @@
 {
   "name": "@jinja-lsp/functions-darwin-arm64",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "os": [
     "darwin"
   ],

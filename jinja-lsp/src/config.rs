@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fs::read_to_string,
     path::{Path, PathBuf},
 };
 
@@ -21,6 +22,29 @@ pub struct JinjaConfig {
     pub lang: String,
     #[serde(skip)]
     pub user_defined: bool,
+    pub hide_undefined: Option<bool>,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct ExternalConfig {
+    #[serde(rename(deserialize = "jinja-lsp"))]
+    jinja_lsp: JinjaConfig,
+}
+
+pub fn search_config() -> Option<JinjaConfig> {
+    let configs = ["pyproject.toml", "Cargo.toml", "jinja-lsp.toml"];
+    for config in configs {
+        let contents = read_to_string(config).unwrap_or_default();
+        if contents.is_empty() {
+            continue;
+        }
+        let config = toml::from_str::<ExternalConfig>(&contents);
+        if let Ok(mut config) = config {
+            config.jinja_lsp.user_defined = true;
+            return Some(config.jinja_lsp);
+        }
+    }
+    return None;
 }
 
 impl JinjaConfig {

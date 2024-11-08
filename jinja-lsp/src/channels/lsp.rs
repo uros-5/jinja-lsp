@@ -21,7 +21,7 @@ use tower_lsp::{
 };
 
 use crate::{
-    config::{walkdir, JinjaConfig},
+    config::{search_config, walkdir, JinjaConfig},
     filter::init_filter_completions,
     lsp_files::LspFiles,
 };
@@ -47,15 +47,17 @@ pub fn lsp_task(
                             lsp_data.is_vscode = true;
                         }
                     }
-                    params
+                    config = params
                         .initialization_options
                         .map(serde_json::from_value)
                         .map(|res| res.ok())
-                        .and_then(|c| -> Option<()> {
-                            config = c?;
+                        .and_then(|c| {
+                            let mut config: JinjaConfig = c?;
                             config.user_defined = true;
-                            None
-                        });
+                            Some(config)
+                        })
+                        .map(|c| c)
+                        .unwrap_or(search_config().unwrap_or(config));
 
                     let definition_provider = Some(OneOf::Left(true));
                     let references_provider = None;
@@ -100,7 +102,7 @@ pub fn lsp_task(
                         },
                         server_info: Some(ServerInfo {
                             name: String::from("jinja-lsp"),
-                            version: Some(String::from("0.1.80")),
+                            version: Some(String::from("0.1.84")),
                         }),
                         offset_encoding: None,
                     };
@@ -123,6 +125,7 @@ pub fn lsp_task(
                             .log_message(MessageType::WARNING, "Backend language not supported")
                             .await;
                     } else {
+                        lsp_data.ignore_globals = config.hide_undefined.unwrap_or(false);
                         match walkdir(&config) {
                             Ok(errors) => {
                                 let _ = diagnostics_channel

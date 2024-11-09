@@ -44,7 +44,7 @@ pub fn search_config() -> Option<JinjaConfig> {
             return Some(config.jinja_lsp);
         }
     }
-    return None;
+    None
 }
 
 impl JinjaConfig {

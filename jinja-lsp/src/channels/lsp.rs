@@ -56,7 +56,6 @@ pub fn lsp_task(
                             config.user_defined = true;
                             Some(config)
                         })
-                        .map(|c| c)
                         .unwrap_or(search_config().unwrap_or(config));
 
                     let definition_provider = Some(OneOf::Left(true));

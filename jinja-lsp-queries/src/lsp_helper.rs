@@ -58,22 +58,26 @@ pub fn search_errors(
                 if empty && exist {
                     to_warn = true;
                 } else if empty {
+                    if ignore_globals {
+                        continue;
+                    }
                     to_warn = true;
-                    if !ignore_globals {
-                        for file in variables {
-                            let temp = file
-                                .1
-                                .iter()
-                                .filter(|variable| variable.name == object.name);
-                            if temp.count() != 0 {
-                                err_type = JinjaDiagnostic::DefinedSomewhere;
-                                to_warn = true;
-                                break;
-                            }
+                    for file in variables {
+                        let temp = file
+                            .1
+                            .iter()
+                            .filter(|variable| variable.name == object.name);
+                        if temp.count() != 0 {
+                            err_type = JinjaDiagnostic::DefinedSomewhere;
+                            to_warn = true;
+                            break;
                         }
                     }
                 }
                 if to_warn {
+                    if ignore_globals {
+                        continue;
+                    }
                     let diagnostic = (err_type, Identifier::from(&object));
                     diagnostics.push(diagnostic);
                 }

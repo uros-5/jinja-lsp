@@ -76,6 +76,7 @@ pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
     all.append(&mut backend);
     let mut lsp_files = LspFiles::default();
     lsp_files.config = config.clone();
+    lsp_files.ignore_globals = config.hide_undefined.unwrap_or(false);
     if config.lang == "python" {
         lsp_files.queries.update_backend(&config.lang);
         lsp_files.parsers.update_backend(&config.lang);

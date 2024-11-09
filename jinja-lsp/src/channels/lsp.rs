@@ -125,7 +125,6 @@ pub fn lsp_task(
                             .log_message(MessageType::WARNING, "Backend language not supported")
                             .await;
                     } else {
-                        lsp_data.ignore_globals = config.hide_undefined.unwrap_or(false);
                         match walkdir(&config) {
                             Ok(errors) => {
                                 let _ = diagnostics_channel

@@ -128,5 +128,13 @@ nvim_lsp.jinja_lsp.setup {
 }
 ```
 
+You can also write configuration in: `pyproject.toml`, `Cargo.toml`, `jinja-lsp.toml`.
+
+```toml
+[jinja-lsp]
+templates = "./templates"
+backend = ["./src"]
+lang = "rust"
+```
 
 Supported languages: Python, Rust

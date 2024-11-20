@@ -88,7 +88,7 @@ impl NodejsLspFiles {
       }
       self.actions.insert(uri.to_string(), actions);
       self.action_objects.insert(uri.to_string(), action_objects);
-      self.lsp_files.variables.insert(uri, identifiers);
+      // self.lsp_files.variables.insert(uri, identifiers);
     }
   }
 
@@ -302,7 +302,7 @@ impl NodejsLspFiles {
       let value = data_type.completion_detail().to_owned();
       let value = format!("{value}\n\n---\n**{}**", &full_name);
       let actions = vec![];
-      let actions = self.actions.get(&filename).unwrap_or(&actions);
+      let actions = self.actions.get("temp").unwrap_or(&actions);
       let action = Action {
         name: full_name.to_owned(),
         description: value.to_owned(),
@@ -389,7 +389,8 @@ impl NodejsLspFiles {
 
       CompletionType::Identifier => {
         let empty = vec![];
-        let actions = self.actions.get("temp").unwrap_or(&empty);
+        let actions = self.actions.get("temp_").unwrap_or(&empty);
+
         if let Some(variables) = self.lsp_files.read_variables(&uri, position, None, None) {
           let mut ret = vec![];
           for item in actions {

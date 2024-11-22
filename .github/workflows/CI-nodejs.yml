@@ -9,7 +9,7 @@ permissions:
 'on':
   push:
     branches:
-      - extending-link-hint-literal
+      - nodejs-completion-duplicate
     tags-ignore:
       - '**'
     paths-ignore:

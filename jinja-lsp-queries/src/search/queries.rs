@@ -71,6 +71,11 @@ const OBJECTS: &str = r#"
 
         (expression) @expr
 
+        (
+          (keyword) @is
+          (#eq? @is "is")
+        )
+        
         (ERROR) @error
 
     ]

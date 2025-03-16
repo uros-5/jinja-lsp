@@ -1,0 +1,1 @@
+Checks if this value is a number.

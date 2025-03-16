@@ -3,6 +3,7 @@ pub mod channels;
 mod config;
 mod filter;
 pub mod lsp_files;
+mod template_tests;
 
 use backend::Backend;
 use tower_lsp::LspService;

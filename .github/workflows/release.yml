@@ -32,12 +32,12 @@ jobs:
             }
           - {
               NAME: darwin-x64,
-              OS: macos-12,
+              OS: macos-latest,
               TARGET: x86_64-apple-darwin,
             }
           - {
               NAME: darwin-arm64,
-              OS: macos-12,
+              OS: macos-latest,
               TARGET: aarch64-apple-darwin,
             }
     steps:
@@ -61,13 +61,13 @@ jobs:
             extension=".exe"
           fi
 
-          mkdir bin
+          mkdir -p bin
           cp "target/${{ matrix.build.TARGET }}/release/${binary_name}" "bin/${binary_name}-${{ matrix.build.NAME }}${extension}"
 
       - name: Upload binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: built-binaries
+          name: jinja-lsp-${{ matrix.build.NAME }}
           path: bin/*
 
   release:
@@ -77,7 +77,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -101,10 +101,10 @@ jobs:
           fi
 
       - name: Download binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: env.SHOULD_RELEASE == 'yes'
         with:
-          name: built-binaries
+          name: jinja-lsp
           path: bin
 
       - name: Publish release

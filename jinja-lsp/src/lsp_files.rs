@@ -330,14 +330,14 @@ impl LspFiles {
         Some(())
     }
 
-    pub fn hover(&self, params: HoverParams) -> Option<(Identifier, bool)> {
+    pub fn hover(&self, params: HoverParams) -> Option<(Identifier, CompletionType)> {
         let uri = &params
             .text_document_position_params
             .text_document
             .uri
             .clone();
         let lang_type = self.config.file_ext(&Path::new(uri.as_str()));
-        let can_hover = lang_type.map_or(false, |lang_type| lang_type == LangType::Template);
+        let can_hover = lang_type == Some(LangType::Template);
         if !can_hover {
             return None;
         }
@@ -360,9 +360,11 @@ impl LspFiles {
         if objects.is_hover(trigger_point) {
             let object = objects.get_last_id()?;
             if object.is_filter {
-                return Some((Identifier::from(object), true));
+                return Some((Identifier::from(object), CompletionType::Filter));
+            } else if object.is_test {
+                return Some((Identifier::from(object), CompletionType::Test));
             } else {
-                return Some((Identifier::from(object), false));
+                return Some((Identifier::from(object), CompletionType::Identifier));
             }
         }
         // else if objects.is_ident(point) {

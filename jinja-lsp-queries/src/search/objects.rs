@@ -8,18 +8,20 @@ pub struct JinjaObject {
     pub name: String,
     pub location: (Point, Point),
     pub is_filter: bool,
+    pub is_test: bool,
     pub fields: Vec<(String, (Point, Point))>,
     pub capture_first: bool,
 }
 
 impl JinjaObject {
-    pub fn new(name: String, start: Point, end: Point, is_filter: bool) -> Self {
+    pub fn new(name: String, start: Point, end: Point, is_filter: bool, is_test: bool) -> Self {
         Self {
             name,
             location: (start, end),
             fields: vec![],
             is_filter,
             capture_first: false,
+            is_test,
         }
     }
 
@@ -44,6 +46,7 @@ pub struct JinjaObjects {
     objects: Vec<JinjaObject>,
     dot: (Point, Point),
     pipe: (Point, Point),
+    test: (Point, Point, bool),
     expr: (Point, Point, ExpressionRange),
     ident: (Point, Point),
 }
@@ -74,6 +77,10 @@ impl JinjaObjects {
                     self.pipe = (start, end);
                 }
                 return Some(ObjectAction::NewFilter);
+            }
+            "is" => {
+                self.test = (start, end, true);
+                return Some(ObjectAction::NewTest);
             }
             "expr" => {
                 let mut cursor = capture.node.walk();
@@ -112,13 +119,12 @@ impl JinjaObjects {
                             return ObjectAction::Invalid;
                         }
                         self.ident = (start, end);
+                        let is_test = self.test.2;
                         let is_filter = self.is_hover(start) && self.is_filter();
-                        self.objects.push(JinjaObject::new(
-                            String::from(value),
-                            start,
-                            end,
-                            is_filter,
-                        ));
+                        let obj =
+                            JinjaObject::new(String::from(value), start, end, is_filter, is_test);
+                        self.objects.push(obj);
+                        self.test.2 = false;
                         return ObjectAction::NewObject;
                     }
                 }
@@ -128,9 +134,16 @@ impl JinjaObjects {
                     return ObjectAction::Invalid;
                 }
                 self.ident = (start, end);
+                let is_test = self.test.2;
                 let is_filter = self.is_hover(start) && self.is_filter();
-                self.objects
-                    .push(JinjaObject::new(String::from(value), start, end, is_filter));
+                self.objects.push(JinjaObject::new(
+                    String::from(value),
+                    start,
+                    end,
+                    is_filter,
+                    is_test,
+                ));
+                self.test.2 = false;
                 return ObjectAction::NewObject;
             }
         }
@@ -164,6 +177,8 @@ impl JinjaObjects {
                 // }
             }
             return Some((CompletionType::Identifier, autoclose));
+        } else if self.is_test(trigger_point) {
+            return Some((CompletionType::Test, false));
         }
         None
     }
@@ -216,6 +231,10 @@ impl JinjaObjects {
         self.objects
             .last()
             .map_or(Range::default(), |item| item.full_range())
+    }
+
+    pub fn is_test(&self, trigger_point: Point) -> bool {
+        self.test.2 && trigger_point >= self.test.1 && trigger_point.row == self.test.1.row
     }
 }
 
@@ -297,6 +316,7 @@ pub fn objects_query(
 #[derive(PartialEq, Debug)]
 pub enum CompletionType {
     Filter,
+    Test,
     Identifier,
     IncludedTemplate { name: String, range: Range },
     Snippets { range: Range },
@@ -320,5 +340,6 @@ pub enum ObjectAction {
     Invalid,
     NewField,
     NewFilter,
+    NewTest,
     NewObject,
 }

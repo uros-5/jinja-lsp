@@ -281,11 +281,8 @@ impl NodejsLspFiles {
     range.end.line += line;
     let range = Some(range);
     let full_name = hover.0.name.to_owned();
-    if hover.1 {
-      let filter = self
-        .filters
-        .iter()
-        .find(|name| name.name == hover.0.name && hover.1);
+    if hover.1 == CompletionType::Filter {
+      let filter = self.filters.iter().find(|name| name.name == hover.0.name);
       if let Some(filter) = filter {
         let markup_content = MarkupContent {
           kind: MarkupKind::Markdown,
@@ -464,6 +461,7 @@ impl NodejsLspFiles {
         items = Some(ret);
       }
       CompletionType::IncompleteFilter { .. } => {}
+      CompletionType::Test => {}
     };
     items
   }

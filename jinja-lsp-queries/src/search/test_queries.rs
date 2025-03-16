@@ -473,4 +473,25 @@ mod query_tests {
             assert_eq!(ids.len(), 2);
         }
     }
+
+    #[test]
+    fn test_jinja_test_completion() {
+        let query = Queries::default();
+        let query = query.jinja_objects;
+
+        let cases = [(
+            r#"
+            {% is  %}
+
+           "#,
+            Point::new(1, 18),
+            Some((CompletionType::Test, false)),
+        )];
+        for case in cases {
+            let tree = prepare_jinja_tree(case.0);
+            let trigger_point = case.1;
+            let objects = objects_query(&query, &tree, trigger_point, case.0, true);
+            assert_eq!(objects.completion(trigger_point), case.2);
+        }
+    }
 }

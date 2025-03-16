@@ -31,7 +31,7 @@ pub fn search_errors(
             let objects = objects.show();
             let this_file = variables.get(file_name)?;
             for object in objects {
-                if object.is_filter {
+                if object.is_filter || object.is_test {
                     continue;
                 }
                 let mut exist = false;

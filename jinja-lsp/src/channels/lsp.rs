@@ -24,6 +24,7 @@ use crate::{
     config::{search_config, walkdir, JinjaConfig},
     filter::init_filter_completions,
     lsp_files::LspFiles,
+    template_tests::init_template_test_completions,
 };
 
 use super::diagnostics::DiagnosticMessage;
@@ -37,6 +38,7 @@ pub fn lsp_task(
     let mut config = JinjaConfig::default();
     let mut lsp_data = LspFiles::default();
     let filters = init_filter_completions();
+    let template_tests = init_template_test_completions();
     let snippets = snippets();
     tokio::spawn(async move {
         while let Some(msg) = lsp_recv.recv().await {
@@ -178,6 +180,25 @@ pub fn lsp_task(
                                 }
                                 items = Some(CompletionResponse::Array(ret));
                             }
+
+                            CompletionType::Test => {
+                                let completions = template_tests.clone();
+                                let mut ret = Vec::with_capacity(completions.len());
+                                for item in completions.into_iter() {
+                                    ret.push(CompletionItem {
+                                        label: item.name,
+                                        kind: Some(CompletionItemKind::TEXT),
+                                        documentation: Some(Documentation::MarkupContent(
+                                            MarkupContent {
+                                                kind: MarkupKind::Markdown,
+                                                value: item.desc.to_string(),
+                                            },
+                                        )),
+                                        ..Default::default()
+                                    });
+                                }
+                                items = Some(CompletionResponse::Array(ret));
+                            }
                             CompletionType::Identifier => {
                                 if let Some(variables) =
                                     lsp_data.read_variables(&uri, position, None, None)
@@ -244,10 +265,23 @@ pub fn lsp_task(
                         .clone();
                     let mut res = None;
                     if let Some(hover) = lsp_data.hover(params) {
-                        if hover.1 {
-                            let filter = filters
-                                .iter()
-                                .find(|name| name.name == hover.0.name && hover.1);
+                        if hover.1 == CompletionType::Filter {
+                            let filter = filters.iter().find(|name| name.name == hover.0.name);
+                            if let Some(filter) = filter {
+                                let markup_content = MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: filter.desc.to_string(),
+                                };
+                                let hover_contents = HoverContents::Markup(markup_content);
+                                let hover = Hover {
+                                    contents: hover_contents,
+                                    range: None,
+                                };
+                                res = Some(hover);
+                            }
+                        } else if hover.1 == CompletionType::Test {
+                            let filter =
+                                template_tests.iter().find(|name| name.name == hover.0.name);
                             if let Some(filter) = filter {
                                 let markup_content = MarkupContent {
                                     kind: MarkupKind::Markdown,

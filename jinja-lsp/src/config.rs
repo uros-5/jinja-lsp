@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::lsp_files::LspFiles;
+use clap::Parser;
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
@@ -99,4 +100,12 @@ pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
 
     lsp_files.read_trees(&mut diags);
     Ok((diags, lsp_files))
+}
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+pub struct JinjaLspArgs {
+    /// Run language server.
+    #[arg(long)]
+    pub stdio: bool,
 }

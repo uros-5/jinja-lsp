@@ -34,3 +34,4 @@ tree-sitter-rust = "0.23.0"
 jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.85"}
 tree-sitter-language = "0.1.0"
 toml = "0.8.19"
+clap = { version = "4.5.39", features = ["derive"] }

@@ -6,11 +6,15 @@ pub mod lsp_files;
 mod template_tests;
 
 use backend::Backend;
+use clap::Parser;
+use config::JinjaLspArgs;
 use tower_lsp::LspService;
 use tower_lsp::Server;
 
 #[tokio::main]
 async fn main() {
+    let _ = JinjaLspArgs::parse();
+
     env_logger::init();
 
     let stdin = tokio::io::stdin();

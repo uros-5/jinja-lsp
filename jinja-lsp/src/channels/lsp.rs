@@ -103,7 +103,7 @@ pub fn lsp_task(
                         },
                         server_info: Some(ServerInfo {
                             name: String::from("jinja-lsp"),
-                            version: Some(String::from("0.1.84")),
+                            version: Some(String::from(env!("CARGO_PKG_VERSION"))),
                         }),
                         offset_encoding: None,
                     };

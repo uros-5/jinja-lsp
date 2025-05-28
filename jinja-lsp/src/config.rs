@@ -16,7 +16,7 @@ use clap::Parser;
 
 /// Jinja configuration
 /// `templates` can be absolute and relative path
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct JinjaConfig {
     pub templates: PathBuf,
     pub backend: Vec<String>,
@@ -26,23 +26,66 @@ pub struct JinjaConfig {
     pub hide_undefined: Option<bool>,
 }
 
-#[derive(Deserialize, Debug, Default, Clone)]
-pub struct ExternalConfig {
-    #[serde(rename(deserialize = "jinja-lsp"))]
-    jinja_lsp: JinjaConfig,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct OptionalJinjaConfig {
+    pub templates: Option<PathBuf>,
+    pub backend: Option<Vec<String>>,
+    #[serde(skip)]
+    pub lang: Option<String>,
+    #[serde(skip)]
+    pub user_defined: Option<bool>,
+    pub hide_undefined: Option<Option<bool>>,
+}
+
+impl Default for JinjaConfig {
+    fn default() -> Self {
+        Self {
+            templates: PathBuf::from("./"),
+            backend: vec![".".to_string()],
+            lang: "python".to_string(),
+            user_defined: false,
+            hide_undefined: Some(false),
+        }
+    }
+}
+
+impl From<OptionalJinjaConfig> for JinjaConfig {
+    fn from(value: OptionalJinjaConfig) -> Self {
+        let mut config = Self::default();
+        if let Some(templates) = value.templates {
+            config.templates = templates;
+        }
+        if let Some(backend) = value.backend {
+            config.backend = backend;
+        }
+        if let Some(lang) = value.lang {
+            config.lang = lang;
+        }
+        if let Some(hide_undefined) = value.hide_undefined {
+            config.hide_undefined = hide_undefined;
+        }
+
+        config
+    }
 }
 
 pub fn search_config() -> Option<JinjaConfig> {
-    let configs = ["pyproject.toml", "Cargo.toml", "jinja-lsp.toml"];
-    for config in configs {
-        let contents = read_to_string(config).unwrap_or_default();
+    let configs = [
+        ("pyproject.toml", "tool", "python"),
+        ("Cargo.toml", "metadata", "rust"),
+        ("jinja-lsp.toml", "tool", "python"),
+    ];
+    for i in configs {
+        let contents = read_to_string(i.0).unwrap_or_default();
         if contents.is_empty() {
             continue;
         }
-        let config = toml::from_str::<ExternalConfig>(&contents);
-        if let Ok(mut config) = config {
-            config.jinja_lsp.user_defined = true;
-            return Some(config.jinja_lsp);
+        let config = get_config(&contents, &i.1);
+        if let Some(config) = config {
+            let mut config = JinjaConfig::from(config);
+            config.user_defined = true;
+            config.lang = i.2.to_string();
+            return Some(config);
         }
     }
     None
@@ -72,7 +115,13 @@ pub type InitLsp = (
 );
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
-    let mut all = vec![config.templates.to_str().unwrap().to_string().clone()];
+    let mut all = vec![config
+        .clone()
+        .templates
+        .to_str()
+        .unwrap()
+        .to_string()
+        .clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);
     let mut lsp_files = LspFiles::default();
@@ -108,4 +157,14 @@ pub struct JinjaLspArgs {
     /// Run language server.
     #[arg(long)]
     pub stdio: bool,
+}
+
+pub fn get_config(contents: &str, tools: &str) -> Option<OptionalJinjaConfig> {
+    let toml_value: toml::Value = toml::from_str(&contents).ok()?;
+    let tools = toml_value.get(tools)?;
+    let config = tools.get("jinja-lsp")?;
+    let toml_value: OptionalJinjaConfig =
+        toml::from_str(&toml::to_string_pretty(config).ok()?).ok()?;
+
+    Some(toml_value)
 }

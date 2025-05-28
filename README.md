@@ -66,7 +66,7 @@ https://github.com/uros-5/jinja-lsp/assets/59397844/015e47b4-b6f6-47c0-8504-5ce7
 
 ## Configuration
 
-Language server configuration
+Language server configuration(all fields are optional)
 
 ```json
 { "templates": "./TEMPLATES_DIR", "backend": ["./BACKEND_DIR"], "lang": "rust"}
@@ -87,54 +87,61 @@ language-servers = ["jinja-lsp"]
 
 Neovim configuration
 
+`init.lua`, I use [kickstarter.nvim](https://github.com/nvim-lua/kickstart.nvim), it uses Mason.nvim for installing language servers.
+
 ```lua
-vim.filetype.add {
-  extension = {
-    jinja = 'jinja',
-    jinja2 = 'jinja',
-    j2 = 'jinja',
-  },
-}
 
 -- if you want to debug
 vim.lsp.set_log_level("debug")
 
-local nvim_lsp = require('lspconfig')
-local configs = require('lspconfig.configs')
 
-if not configs.jinja_lsp then
-configs.jinja_lsp = {
-  default_config = {
-    name = "jinja-lsp",
-    cmd = { 'path_to_lsp_or_command' },
-    filetypes = { 'jinja', 'rust' },
-    root_dir = function(fname)
-      return "."
-      --return nvim_lsp.util.find_git_ancestor(fname)
-    end,
-    init_options = {
-      templates = './templates',
-      backend = { './src' },
-      lang = "rust"
+require('lazy').setup(
+  -- your other configs
+  {
+    -- Main LSP Configuration
+    'neovim/nvim-lspconfig',
+    dependencies = {
+      -- dependencies
     },
-},
-}
-end
-local capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities())
-nvim_lsp.jinja_lsp.setup {
-  capabilities = capabilities
-}
-nvim_lsp.jinja_lsp.setup {
-}
+    config = function() {
+      -- keybindings etc.
+
+      vim.filetype.add {
+        extension = {
+          jinja = 'jinja',
+          jinja2 = 'jinja',
+          j2 = 'jinja',
+          py = 'python'
+        },
+      }
+      local servers = {
+        jinja_lsp = {
+          filetypes = { 'jinja', 'rust', 'python' },
+        },
+        -- other servers        
+      }
+    end
+  }
+)
+
 ```
 
 You can also write configuration in: `pyproject.toml`, `Cargo.toml`, `jinja-lsp.toml`.
 
+Python
+
 ```toml
-[jinja-lsp]
+[tool.jinja-lsp]
 templates = "./templates"
 backend = ["./src"]
-lang = "rust"
+```
+
+Rust
+
+```toml
+[metadata.jinja-lsp]
+templates = "./templates"
+backend = ["./src"]
 ```
 
 Supported languages: Python, Rust

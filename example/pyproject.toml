@@ -29,8 +29,5 @@ packages = ["src"]
 extraPaths = ["example/.venv/lib/python3.10/site-packages"] 
 
 
-[jinja-lsp]
-templates = "./templates"
-backend = ["./src"]
-lang = "rust"
+[tool.jinja-lsp]
 hide_undefined = false

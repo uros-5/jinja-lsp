@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::read_to_string,
     path::{Path, PathBuf},
 };
@@ -24,6 +24,7 @@ pub struct JinjaConfig {
     #[serde(skip)]
     pub user_defined: bool,
     pub hide_undefined: Option<bool>,
+    pub template_extensions: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -35,6 +36,7 @@ pub struct OptionalJinjaConfig {
     #[serde(skip)]
     pub user_defined: Option<bool>,
     pub hide_undefined: Option<Option<bool>>,
+    pub template_extensions: Option<Vec<String>>,
 }
 
 impl Default for JinjaConfig {
@@ -45,6 +47,7 @@ impl Default for JinjaConfig {
             lang: "python".to_string(),
             user_defined: false,
             hide_undefined: Some(false),
+            template_extensions: vec!["html".to_string(), "jinja".to_string(), "j2".to_string()],
         }
     }
 }
@@ -65,7 +68,25 @@ impl From<OptionalJinjaConfig> for JinjaConfig {
             config.hide_undefined = hide_undefined;
         }
 
+        if let Some(new_extensions) = value.template_extensions {
+            new_template_extensions(&mut config, Some(new_extensions));
+        }
+
         config
+    }
+}
+
+pub fn new_template_extensions(config: &mut JinjaConfig, new_extensions: Option<Vec<String>>) {
+    let existing: HashSet<_> = config.template_extensions.iter().cloned().collect();
+    let new_extensions = new_extensions.unwrap_or(vec![
+        "html".to_string(),
+        "jinja".to_string(),
+        "j2".to_string(),
+    ]);
+    for new_ext in new_extensions {
+        if !existing.contains(&new_ext) {
+            config.template_extensions.push(new_ext);
+        }
     }
 }
 
@@ -93,14 +114,19 @@ pub fn search_config() -> Option<JinjaConfig> {
 
 impl JinjaConfig {
     pub fn file_ext(&self, path: &&Path) -> Option<LangType> {
-        match path.extension()?.to_str() {
-            Some(e) => match e {
-                "html" | "jinja" | "j2" => Some(LangType::Template),
-                "rs" | "py" => Some(LangType::Backend),
-                _ => None,
-            },
+        let extension = match path.extension()?.to_str() {
+            Some(e) => {
+                if self.template_extensions.contains(&e.to_string()) {
+                    Some(LangType::Template)
+                } else if e == "rs" || e == "py" {
+                    Some(LangType::Backend)
+                } else {
+                    None
+                }
+            }
             None => None,
-        }
+        };
+        extension
     }
 
     pub fn user_defined(&mut self, def: bool) -> Option<()> {

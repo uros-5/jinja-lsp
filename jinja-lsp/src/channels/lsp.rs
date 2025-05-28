@@ -21,7 +21,7 @@ use tower_lsp::{
 };
 
 use crate::{
-    config::{search_config, walkdir, JinjaConfig},
+    config::{new_template_extensions, search_config, walkdir, JinjaConfig},
     filter::init_filter_completions,
     lsp_files::LspFiles,
     template_tests::init_template_test_completions,
@@ -56,6 +56,7 @@ pub fn lsp_task(
                         .and_then(|c| {
                             let mut config: JinjaConfig = c?;
                             config.user_defined = true;
+                            new_template_extensions(&mut config, None);
                             Some(config)
                         })
                         .unwrap_or(search_config().unwrap_or(config));

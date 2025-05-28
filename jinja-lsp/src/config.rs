@@ -80,7 +80,7 @@ pub fn search_config() -> Option<JinjaConfig> {
         if contents.is_empty() {
             continue;
         }
-        let config = get_config(&contents, &i.1);
+        let config = get_config(&contents, i.1);
         if let Some(config) = config {
             let mut config = JinjaConfig::from(config);
             config.user_defined = true;
@@ -160,7 +160,7 @@ pub struct JinjaLspArgs {
 }
 
 pub fn get_config(contents: &str, tools: &str) -> Option<OptionalJinjaConfig> {
-    let toml_value: toml::Value = toml::from_str(&contents).ok()?;
+    let toml_value: toml::Value = toml::from_str(contents).ok()?;
     let tools = toml_value.get(tools)?;
     let config = tools.get("jinja-lsp")?;
     let toml_value: OptionalJinjaConfig =

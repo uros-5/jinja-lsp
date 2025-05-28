@@ -126,6 +126,12 @@ require('lazy').setup(
 
 ```
 
+## Adding custom template extensions:
+
+```
+template_extensions = ["j2", "tex"]
+```
+
 You can also write configuration in: `pyproject.toml`, `Cargo.toml`, `jinja-lsp.toml`.
 
 Python

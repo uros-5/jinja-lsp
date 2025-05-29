@@ -4,3 +4,5 @@ client/node_modules
 out/
 src/
 tsconfig.json
+build.sh
+build-all.sh

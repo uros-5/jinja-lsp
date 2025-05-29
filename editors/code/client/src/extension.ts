@@ -4,21 +4,22 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as path from 'path';
-import { workspace, ExtensionContext, commands, window, Range, Selection } from 'vscode';
+import { workspace, ExtensionContext  } from 'vscode';
 
 import {
 	LanguageClient,
 	LanguageClientOptions,
 	ServerOptions,
-	TransportKind
 } from 'vscode-languageclient/node';
 import * as child_process from 'child_process';
-
+import * as vscode from "vscode";
+import { binaryName } from './binaryName';
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+	let output = vscode.window.createOutputChannel("jinja-lsp");
 	// The server is implemented in node
-	const serverModule = getServer();
+	const serverModule = getServer(output, context.extensionPath);
 	if (!serverModule.valid) {
 		throw new Error(serverModule.name);
 	}
@@ -67,16 +68,13 @@ export function deactivate(): Thenable<void> | undefined {
 	return client.stop();
 }
 
-function getServer(): { valid: boolean, name: string } {
+function getServer(_output: vscode.OutputChannel, cwd: string): { valid: boolean, name: string } {
 	try {
 		// let name = "/home/uros/.cache/cargo/target/debug/jinja-lsp";
-		let name = "jinja-lsp";
-		const windows = process.platform === "win32";
-		const suffix = windows ? ".exe" : "";
-		const binaryName = name + suffix;
+		let name = path.join(cwd, "media", binaryName);
 		const validation = child_process.spawnSync(name);
 		if (validation.status === 0) {
-			return { valid: true, name: binaryName };
+			return { valid: true, name: name };
 		}
 		else {
 			return { valid: false, name: "Jinja language server not installed." }
@@ -87,3 +85,4 @@ function getServer(): { valid: boolean, name: string } {
 		return { valid: false, name: "Jinja language server not installed." }
 	}
 }
+

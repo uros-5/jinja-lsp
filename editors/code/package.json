@@ -2,7 +2,7 @@
   "name": "jinja-lsp",
   "description": "jinja-lsp",
   "license": "MIT",
-  "version": "0.1.83",
+  "version": "0.1.86",
   "repository": {
     "url": "https://github.com/uros-5/jinja-lsp"
   },
@@ -37,14 +37,10 @@
       "properties": {
         "jinja-lsp.templates": {
           "type": "string",
-          "default": "./templates",
           "description": "Templates directory"
         },
         "jinja-lsp.backend": {
           "type": "array",
-          "default": [
-            "./src"
-          ],
           "description": "Backend directories"
         },
         "jinja-lsp.lang": {
@@ -53,8 +49,20 @@
             "rust",
             "python"
           ],
-          "default": "rust",
           "description": "Language that is used on backend"
+        },
+        "jinja-lsp.hide_undefined": {
+          "type": "boolean",
+          "description": "Disable warnings about undefined variables"
+        },
+        "jinja-lsp.template_extension": {
+          "type": "array",
+          "default": [
+            "html",
+            "jinja",
+            "j2"
+          ],
+          "description": "Add custom template extension"
         }
       }
     }
@@ -78,9 +86,9 @@
     "@typescript-eslint/parser": "^7.1.0",
     "@vscode/test-cli": "^0.0.9",
     "@vscode/test-electron": "^2.3.9",
-    "esbuild": "^0.20.2",
+    "esbuild": "0.20.2",
     "eslint": "^8.57.0",
     "mocha": "^10.3.0",
-    "typescript": "^5.3.3"
+    "typescript": "5.3.3"
   }
 }

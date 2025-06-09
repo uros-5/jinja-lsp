@@ -86,9 +86,9 @@
     "@typescript-eslint/parser": "^7.1.0",
     "@vscode/test-cli": "^0.0.9",
     "@vscode/test-electron": "^2.3.9",
-    "esbuild": "0.20.2",
+    "esbuild": "^0.25.5",
     "eslint": "^8.57.0",
-    "mocha": "^10.3.0",
+    "mocha": "^10.8.2",
     "typescript": "5.3.3"
   }
 }

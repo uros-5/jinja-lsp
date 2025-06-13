@@ -226,38 +226,40 @@ impl JinjaDefinitions {
                 content.to_owned().clone_into(&mut identifier.name);
                 identifier.scope_ends.0 = current_scope;
                 let last = self.definitions.last_mut();
-                if let Some(last) = last {
-                    match last {
-                        Definition::ForLoop { key, value } => {
-                            if key.name.is_empty() {
-                                *key = identifier;
-                            } else if let Some(value) = value {
-                                if value.name.is_empty() {
-                                    *value = identifier;
-                                    self.can_add_id = false;
-                                }
-                            }
-                        }
-                        Definition::Set { key, .. } => {
-                            if key.name.is_empty() {
-                                *key = identifier;
+                let Some(last) = last else {
+                    return Some(false);
+                };
+
+                match last {
+                    Definition::ForLoop { key, value } => {
+                        if key.name.is_empty() {
+                            *key = identifier;
+                        } else if let Some(value) = value {
+                            if value.name.is_empty() {
+                                *value = identifier;
                                 self.can_add_id = false;
                             }
                         }
-                        Definition::With { keys } => {
-                            keys.push(identifier);
+                    }
+                    Definition::Set { key, .. } => {
+                        if key.name.is_empty() {
+                            *key = identifier;
+                            self.can_add_id = false;
                         }
-                        Definition::Macro { keys, scope } => {
-                            if keys.is_empty() {
-                                identifier.scope_ends.0 = *scope;
-                            }
-                            keys.push(identifier);
+                    }
+                    Definition::With { keys } => {
+                        keys.push(identifier);
+                    }
+                    Definition::Macro { keys, scope } => {
+                        if keys.is_empty() {
+                            identifier.scope_ends.0 = *scope;
                         }
-                        Definition::Block { name } => {
-                            if name.name.is_empty() {
-                                *name = identifier;
-                                self.can_add_id = false;
-                            }
+                        keys.push(identifier);
+                    }
+                    Definition::Block { name } => {
+                        if name.name.is_empty() {
+                            *name = identifier;
+                            self.can_add_id = false;
                         }
                     }
                 }

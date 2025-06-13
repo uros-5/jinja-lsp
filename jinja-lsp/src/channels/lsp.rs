@@ -161,101 +161,100 @@ pub fn lsp_task(
                     let completion = lsp_data.completion(params);
                     let mut items = None;
 
-                    if let Some(completion) = completion {
-                        match completion.0 {
-                            CompletionType::Filter => {
-                                let completions = filters.clone();
-                                let mut ret = Vec::with_capacity(completions.len());
-                                for item in completions.into_iter() {
-                                    ret.push(CompletionItem {
-                                        label: item.name,
-                                        kind: Some(CompletionItemKind::TEXT),
-                                        documentation: Some(Documentation::MarkupContent(
-                                            MarkupContent {
-                                                kind: MarkupKind::Markdown,
-                                                value: item.desc.to_string(),
-                                            },
-                                        )),
-                                        ..Default::default()
-                                    });
-                                }
-                                items = Some(CompletionResponse::Array(ret));
-                            }
+                    let Some(completion) = completion else {
+                        continue;
+                    };
 
-                            CompletionType::Test => {
-                                let completions = template_tests.clone();
-                                let mut ret = Vec::with_capacity(completions.len());
-                                for item in completions.into_iter() {
-                                    ret.push(CompletionItem {
-                                        label: item.name,
-                                        kind: Some(CompletionItemKind::TEXT),
-                                        documentation: Some(Documentation::MarkupContent(
-                                            MarkupContent {
-                                                kind: MarkupKind::Markdown,
-                                                value: item.desc.to_string(),
-                                            },
-                                        )),
-                                        ..Default::default()
-                                    });
-                                }
-                                items = Some(CompletionResponse::Array(ret));
+                    match completion.0 {
+                        CompletionType::Filter => {
+                            let completions = filters.clone();
+                            let mut ret = Vec::with_capacity(completions.len());
+                            for item in completions.into_iter() {
+                                ret.push(CompletionItem {
+                                    label: item.name,
+                                    kind: Some(CompletionItemKind::TEXT),
+                                    documentation: Some(Documentation::MarkupContent(
+                                        MarkupContent {
+                                            kind: MarkupKind::Markdown,
+                                            value: item.desc.to_string(),
+                                        },
+                                    )),
+                                    ..Default::default()
+                                });
                             }
-                            CompletionType::Identifier => {
-                                if let Some(variables) =
-                                    lsp_data.read_variables(&uri, position, None, None)
+                            items = Some(CompletionResponse::Array(ret));
+                        }
+
+                        CompletionType::Test => {
+                            let completions = template_tests.clone();
+                            let mut ret = Vec::with_capacity(completions.len());
+                            for item in completions.into_iter() {
+                                ret.push(CompletionItem {
+                                    label: item.name,
+                                    kind: Some(CompletionItemKind::TEXT),
+                                    documentation: Some(Documentation::MarkupContent(
+                                        MarkupContent {
+                                            kind: MarkupKind::Markdown,
+                                            value: item.desc.to_string(),
+                                        },
+                                    )),
+                                    ..Default::default()
+                                });
+                            }
+                            items = Some(CompletionResponse::Array(ret));
+                        }
+                        CompletionType::Identifier => {
+                            if let Some(variables) =
+                                lsp_data.read_variables(&uri, position, None, None)
+                            {
+                                items = Some(CompletionResponse::Array(variables));
+                            }
+                        }
+                        CompletionType::IncludedTemplate { name, range } => {
+                            if let Some(templates) =
+                                lsp_data.read_templates(name, range, position, None)
+                            {
+                                items = Some(CompletionResponse::Array(templates));
+                            }
+                        }
+                        CompletionType::Snippets { range } => {
+                            let mut filtered = vec![];
+                            for snippet in snippets.iter() {
+                                let mut snippet = snippet.clone();
+                                if let Some(CompletionTextEdit::Edit(TextEdit {
+                                    new_text, ..
+                                })) = snippet.text_edit
                                 {
-                                    items = Some(CompletionResponse::Array(variables));
-                                }
-                            }
-                            CompletionType::IncludedTemplate { name, range } => {
-                                if let Some(templates) =
-                                    lsp_data.read_templates(name, range, position, None)
-                                {
-                                    items = Some(CompletionResponse::Array(templates));
-                                }
-                            }
-                            CompletionType::Snippets { range } => {
-                                let mut filtered = vec![];
-                                for snippet in snippets.iter() {
-                                    let mut snippet = snippet.clone();
-                                    if let Some(CompletionTextEdit::Edit(TextEdit {
-                                        new_text,
-                                        ..
-                                    })) = snippet.text_edit
-                                    {
-                                        if !lsp_data.is_vscode {
-                                            snippet.text_edit =
-                                                Some(CompletionTextEdit::InsertAndReplace(
-                                                    InsertReplaceEdit {
-                                                        new_text,
-                                                        insert: range,
-                                                        replace: range,
-                                                    },
-                                                ));
-                                        } else {
-                                            snippet.text_edit = None;
-                                        }
+                                    if !lsp_data.is_vscode {
+                                        snippet.text_edit =
+                                            Some(CompletionTextEdit::InsertAndReplace(
+                                                InsertReplaceEdit {
+                                                    new_text,
+                                                    insert: range,
+                                                    replace: range,
+                                                },
+                                            ));
+                                    } else {
+                                        snippet.text_edit = None;
                                     }
-                                    filtered.push(snippet);
                                 }
+                                filtered.push(snippet);
+                            }
 
-                                if !filtered.is_empty() {
-                                    items = Some(CompletionResponse::Array(filtered));
-                                }
+                            if !filtered.is_empty() {
+                                items = Some(CompletionResponse::Array(filtered));
                             }
-                            CompletionType::IncompleteIdentifier { name, range } => {
-                                if let Some(variables) = lsp_data.read_variables(
-                                    &uri,
-                                    position,
-                                    Some((name, range)),
-                                    None,
-                                ) {
-                                    items = Some(CompletionResponse::Array(variables));
-                                }
+                        }
+                        CompletionType::IncompleteIdentifier { name, range } => {
+                            if let Some(variables) =
+                                lsp_data.read_variables(&uri, position, Some((name, range)), None)
+                            {
+                                items = Some(CompletionResponse::Array(variables));
                             }
-                            CompletionType::IncompleteFilter { .. } => {}
-                        };
-                    }
+                        }
+                        CompletionType::IncompleteFilter { .. } => {}
+                    };
+
                     let _ = sender.send(items);
                 }
                 LspMessage::Hover(params, sender) => {

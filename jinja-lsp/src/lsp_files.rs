@@ -711,16 +711,23 @@ impl LspFiles {
         let templates = all_templates
             .keys()
             .filter(|template| template.contains(&prefix));
-        let mut abc = vec![];
+        let mut completions = vec![];
         for template in templates {
-            let c = &self
+            let mut templates = self
                 .config
                 .templates
                 .as_path()
                 .to_str()
                 .unwrap()
-                .replace('.', "");
-            let mut parts = template.split(c);
+                .replacen('.', "", 1);
+            if templates == "/" {
+                templates = std::env::current_dir()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+            }
+            let mut parts = template.split(&templates);
             parts.next();
             let label = parts.next()?.replacen('/', "", 1);
             let new_text = format!("\"{label}\"");
@@ -754,10 +761,10 @@ impl LspFiles {
                 additional_text_edits,
                 ..Default::default()
             };
-            abc.push(item);
+            completions.push(item);
         }
 
-        Some(abc)
+        Some(completions)
     }
 
     pub fn get_variable(&self, prefix: String, id: String, file_name: &str) -> Option<Vec<String>> {

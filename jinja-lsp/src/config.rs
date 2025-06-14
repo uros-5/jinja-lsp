@@ -4,12 +4,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use ignore::Walk;
 use jinja_lsp_queries::{
     search::Identifier,
     tree_builder::{JinjaDiagnostic, LangType},
 };
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::lsp_files::LspFiles;
 use clap::Parser;
@@ -159,7 +159,7 @@ pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
     }
     let mut diags = HashMap::new();
     for dir in all {
-        let walk = WalkDir::new(dir);
+        let walk = Walk::new(dir);
         for entry in walk.into_iter() {
             let entry = entry?;
             let metadata = entry.metadata()?;

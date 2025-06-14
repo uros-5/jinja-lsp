@@ -13,6 +13,10 @@ jinja-lsp enhances minijinja development experience by providing Helix/Nvim user
 cargo install jinja-lsp
 ```
 
+or
+
+download [binary](https://github.com/uros-5/jinja-lsp/releases/latest) from releases page.
+
 
 ## Features
 
@@ -49,6 +53,8 @@ See the complete filter or variable description by hovering over it.
 It's recommended to reset variables on server in case you rename/delete file.
 
 <img src="https://raw.githubusercontent.com/uros-5/jinja-lsp/main/.github/code_actions.png" alt="" />
+
+<img src="https://raw.githubusercontent.com/uros-5/jinja-lsp/main/.github/code_actions2.png" alt="" />
 
 ### Goto Definition
 

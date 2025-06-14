@@ -20,7 +20,7 @@ impl JinjaDiagnostic {
         match &self {
             JinjaDiagnostic::DefinedSomewhere => DiagnosticSeverity::INFORMATION,
             JinjaDiagnostic::Undefined => DiagnosticSeverity::WARNING,
-            JinjaDiagnostic::TemplateNotFound => DiagnosticSeverity::WARNING,
+            JinjaDiagnostic::TemplateNotFound => DiagnosticSeverity::ERROR,
         }
     }
 }

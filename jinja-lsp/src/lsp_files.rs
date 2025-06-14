@@ -557,7 +557,7 @@ impl LspFiles {
                         annotation_id: None,
                     };
                     commands.push(CodeActionOrCommand::CodeAction(CodeAction {
-                        title: "Generate new template".to_string(),
+                        title: "Create this template.".to_string(),
                         kind: Some(CodeActionKind::QUICKFIX),
                         edit: Some(WorkspaceEdit {
                             changes: None,

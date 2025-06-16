@@ -170,11 +170,13 @@ impl LspFiles {
         for change in params.content_changes {
             let range = change.range?;
             let input_edit = rope.to_input_edit(range, &change.text);
-            let start = rope.to_byte(range.start);
-            let end = rope.to_byte(range.end);
-            if start <= end {
+            let start = rope.to_char(range.start);
+            let end = rope.to_char(range.end);
+            let rope_len = rope.len_chars();
+            let rope_len = end <= rope_len && start <= rope_len;
+            if start <= end && rope_len {
                 rope.remove(start..end);
-            } else {
+            } else if rope_len {
                 rope.remove(end..start);
             }
             if !change.text.is_empty() {

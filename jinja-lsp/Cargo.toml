@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp"
-version = "0.1.87"
+version = "0.1.88"
 edition = "2021"
 license = "MIT"
 authors = ["uros-5"]
@@ -30,7 +30,7 @@ tree-sitter = "^0.23.0"
 anyhow = "1.0.75"
 tree-sitter-jinja2 = "0.0.12"
 tree-sitter-rust = "0.23.0"
-jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.87"}
+jinja-lsp-queries = { path = "../jinja-lsp-queries", version = "0.1.88"}
 tree-sitter-language = "0.1.0"
 toml = {version = "0.8.19", features = ["display"]}
 clap = { version = "4.5.39", features = ["derive"] }

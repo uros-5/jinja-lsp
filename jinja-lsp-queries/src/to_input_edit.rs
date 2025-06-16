@@ -6,7 +6,7 @@ use tree_sitter::{InputEdit, Point};
 
 pub trait ToInputEdit {
     fn to_point(&self, position: Position) -> Point;
-    fn to_byte(&self, position: Position) -> usize;
+    fn to_char(&self, position: Position) -> usize;
     fn to_position(&self, offset: usize) -> Position;
     fn to_input_edit(&self, range: Range, text: &str) -> InputEdit;
 }
@@ -16,8 +16,8 @@ impl ToInputEdit for Rope {
         Point::new(position.line as usize, position.character as usize)
     }
 
-    fn to_byte(&self, position: Position) -> usize {
-        let start_line = self.line_to_byte(position.line as usize);
+    fn to_char(&self, position: Position) -> usize {
+        let start_line = self.line_to_char(position.line as usize);
         start_line + position.character as usize
     }
 
@@ -48,14 +48,14 @@ impl ToInputEdit for Rope {
         let start = range.start;
         let end = range.end;
 
-        let start_byte = self.to_byte(start);
+        let start_byte = self.to_char(start);
         let start_position = self.to_point(start);
 
         let new_end_byte = start_byte + text.len();
         let new_end_position = self.to_position(new_end_byte);
         let new_end_position = self.to_point(new_end_position);
 
-        let old_end_byte = self.to_byte(end);
+        let old_end_byte = self.to_char(end);
         let old_end_position = self.to_point(end);
 
         InputEdit {

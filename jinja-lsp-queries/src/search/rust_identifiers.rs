@@ -1,4 +1,4 @@
-use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
+use tree_sitter::{Point, Query, QueryCapture, QueryCursor, StreamingIterator, Tree};
 
 use super::{Identifier, IdentifierType};
 
@@ -58,16 +58,15 @@ pub fn backend_definition_query(
     let mut cursor_qry = QueryCursor::new();
     let mut rust = BackendIdentifiers::default();
     let capture_names = query.capture_names();
-    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
-    let captures = matches.into_iter().flat_map(|m| {
-        m.captures
-            .iter()
-            .filter(|capture| all || capture.node.start_position() <= trigger_point)
-    });
-    for capture in captures {
-        let name = &capture_names[capture.index as usize];
-        if rust.check(name, capture, text).is_none() {
-            break;
+    let mut matches = cursor_qry.matches(query, closest_node, text.as_bytes());
+    while let Some(m) = matches.next() {
+        for capture in m.captures {
+            if all || capture.node.start_position() <= trigger_point {
+                let name = &capture_names[capture.index as usize];
+                if rust.check(name, capture, text).is_none() {
+                    break;
+                }
+            }
         }
     }
     rust

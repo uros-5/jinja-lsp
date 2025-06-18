@@ -2,7 +2,7 @@ use crate::to_input_edit::to_position2;
 use tower_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, CompletionTextEdit, Range, TextEdit,
 };
-use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
+use tree_sitter::{Point, Query, QueryCapture, QueryCursor, StreamingIterator, Tree};
 
 #[derive(Default, Debug)]
 pub struct Snippets {
@@ -64,18 +64,17 @@ pub fn snippets_query(
     let mut snippets = Snippets::default();
     let mut cursor_qry = QueryCursor::new();
     let capture_names = query.capture_names();
-    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
+    let mut matches = cursor_qry.matches(query, closest_node, text.as_bytes());
     trigger_point.column += 2;
-    let captures = matches.into_iter().flat_map(|m| {
-        m.captures
-            .iter()
-            .filter(|capture| all || capture.node.start_position() <= trigger_point)
-    });
-    for capture in captures {
-        let name = &capture_names[capture.index as usize];
-        let check = snippets.check(name, capture);
-        if check.is_none() {
-            break;
+    while let Some(m) = matches.next() {
+        for capture in m.captures {
+            if all || capture.node.start_position() <= trigger_point {
+                let name = &capture_names[capture.index as usize];
+                let check = snippets.check(name, capture);
+                if check.is_none() {
+                    break;
+                }
+            }
         }
     }
     snippets

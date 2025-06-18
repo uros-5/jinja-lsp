@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tree_sitter::{Point, Query, QueryCursor, Tree};
+use tree_sitter::{Point, Query, QueryCursor, StreamingIterator, Tree};
 
 pub struct PythonAttributes {
     pub attributes: HashMap<Point, Vec<PythonIdentifier>>,
@@ -57,8 +57,8 @@ pub fn python_identifiers(
     let mut attributes = PythonAttributes {
         attributes: HashMap::new(),
     };
-    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
-    for i in matches {
+    let mut matches = cursor_qry.matches(query, closest_node, text.as_bytes());
+    while let Some(i) = matches.next() {
         for capture in i.captures {
             if let Some(parent) = capture.node.parent() {
                 let attribute = attributes
@@ -76,5 +76,6 @@ pub fn python_identifiers(
             }
         }
     }
+
     attributes.merge(line)
 }

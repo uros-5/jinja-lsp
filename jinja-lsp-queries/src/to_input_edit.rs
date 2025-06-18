@@ -22,7 +22,7 @@ impl ToInputEdit for Rope {
     }
 
     fn to_position(&self, mut offset: usize) -> Position {
-        offset = offset.min(self.len_bytes());
+        offset = offset.min(self.len_chars());
         let mut low = 0usize;
         let mut high = self.len_lines();
         if high == 0 {
@@ -33,14 +33,14 @@ impl ToInputEdit for Rope {
         }
         while low < high {
             let mid = low + (high - low) / 2;
-            if self.line_to_byte(mid) > offset {
+            if self.line_to_char(mid) > offset {
                 high = mid;
             } else {
                 low = mid + 1;
             }
         }
         let line = low - 1;
-        let character = offset - self.line_to_byte(line);
+        let character = offset - self.line_to_char(line);
         Position::new(line as u32, character as u32)
     }
 
@@ -52,7 +52,7 @@ impl ToInputEdit for Rope {
         let start_position = self.to_point(start);
         let text = remove_unicode_content(text);
 
-        let new_end_byte = start_byte + text.len();
+        let new_end_byte = start_byte + text.chars().count();
         let new_end_position = self.to_position(new_end_byte);
         let new_end_position = self.to_point(new_end_position);
 

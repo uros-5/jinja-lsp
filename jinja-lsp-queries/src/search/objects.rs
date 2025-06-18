@@ -1,5 +1,5 @@
 use tower_lsp::lsp_types::Range;
-use tree_sitter::{Point, Query, QueryCapture, QueryCursor, Tree};
+use tree_sitter::{Point, Query, QueryCapture, QueryCursor, StreamingIterator, Tree};
 
 use super::{completion_start, to_range, to_range2, Identifier};
 
@@ -256,20 +256,20 @@ pub fn objects_query(
         Point::default(),
         ExpressionRange::default(),
     );
-    let matches = cursor_qry.matches(query, closest_node, text.as_bytes());
-    'loop1: for m in matches {
+    let mut matches = cursor_qry.matches(query, closest_node, text.as_bytes());
+    while let Some(m) = matches.next() {
         for capture in m.captures {
             let smaller = trigger_point <= capture.node.start_position();
             if all || trigger_point >= capture.node.start_position() {
                 let name = &capture_names[capture.index as usize];
                 let checked = objects.check(name, capture, text);
                 if checked.is_none() {
-                    break 'loop1;
+                    break;
                 }
             } else if smaller {
                 let name = capture_names[capture.index as usize];
                 if objects.is_filter() || name == "expr" {
-                    break 'loop1;
+                    break;
                 } else if !continued {
                     if objects.is_hover(trigger_point) {
                         continued = true;
@@ -277,13 +277,13 @@ pub fn objects_query(
                         my_expr = objects.expr;
                         continue;
                     } else {
-                        break 'loop1;
+                        break;
                     }
                 } else if continued {
                     let name = &capture_names[capture.index as usize];
                     let checked = objects.check(name, capture, text);
                     if checked.is_none() {
-                        break 'loop1;
+                        break;
                     } else if checked.is_some_and(|item| {
                         matches!(
                             item,
@@ -304,7 +304,6 @@ pub fn objects_query(
                             objects.objects.pop();
                             objects.expr = my_expr;
                         }
-                        break 'loop1;
                     }
                 }
             }

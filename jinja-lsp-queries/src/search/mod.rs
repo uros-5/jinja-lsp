@@ -57,7 +57,7 @@ pub fn completion_start(mut trigger_point: Point, identifier: &Identifier) -> Op
     if trigger_point.column > 0 {
         trigger_point.column -= 1;
     }
-    let len = identifier.name.len();
+    let len = identifier.name.chars().count();
     if len == 0 {
         return Some("");
     }

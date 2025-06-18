@@ -1,8 +1,11 @@
 #[cfg(test)]
 mod query_tests {
-    use crate::search::{
-        objects::objects_query, python_identifiers::python_identifiers,
-        snippets_completion::snippets_query, to_range,
+    use crate::{
+        search::{
+            objects::objects_query, python_identifiers::python_identifiers,
+            snippets_completion::snippets_query, to_range,
+        },
+        to_input_edit::remove_unicode_content,
     };
     use tree_sitter::{Parser, Point};
 
@@ -493,5 +496,18 @@ mod query_tests {
             let objects = objects_query(&query, &tree, trigger_point, case.0, true);
             assert_eq!(objects.completion(trigger_point), case.2);
         }
+    }
+
+    #[test]
+    fn position_of_identifier_after_unicode_characters() {
+        let query = Queries::default();
+        let query = query.jinja_objects;
+        let text = &remove_unicode_content(r#" {{'aににににに' PROJECT_NAME}} "#);
+        let tree = prepare_jinja_tree(text);
+        let trigger_point = Point::new(0, 0);
+        let objects = objects_query(&query, &tree, trigger_point, text, true).show();
+        let object = objects.last().unwrap();
+        assert_eq!(object.location.0, Point::new(0, 12));
+        assert_eq!(object.location.1, Point::new(0, 24));
     }
 }

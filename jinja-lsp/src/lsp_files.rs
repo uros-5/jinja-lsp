@@ -130,7 +130,7 @@ impl LspFiles {
     ) -> Option<()> {
         let trees = self.trees.get_mut(&lang_type)?;
         let old_tree = trees.get_mut(&file_name.to_string());
-        let file_content = remove_unicode_content(&file_content);
+        let file_content = remove_unicode_content(file_content);
         match old_tree {
             Some(old_tree) => {
                 let new_tree = self

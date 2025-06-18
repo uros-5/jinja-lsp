@@ -50,6 +50,7 @@ impl ToInputEdit for Rope {
 
         let start_byte = self.to_char(start);
         let start_position = self.to_point(start);
+        let text = remove_unicode_content(text);
 
         let new_end_byte = start_byte + text.len();
         let new_end_position = self.to_position(new_end_byte);
@@ -71,4 +72,11 @@ impl ToInputEdit for Rope {
 
 pub fn to_position2(point: Point) -> Position {
     Position::new(point.row as u32, point.column as u32)
+}
+
+pub fn remove_unicode_content(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| if c.is_ascii() { c } else { 'a' })
+        .collect()
 }

@@ -12,6 +12,7 @@ use jinja_lsp_queries::{
         templates::templates_query,
         to_range, Identifier, IdentifierType,
     },
+    to_input_edit::remove_unicode_content,
     tree_builder::{JinjaDiagnostic, LangType},
 };
 use std::{
@@ -129,16 +130,17 @@ impl LspFiles {
     ) -> Option<()> {
         let trees = self.trees.get_mut(&lang_type)?;
         let old_tree = trees.get_mut(&file_name.to_string());
+        let file_content = remove_unicode_content(&file_content);
         match old_tree {
             Some(old_tree) => {
                 let new_tree = self
                     .parsers
-                    .parse(lang_type, file_content, Some(old_tree))?;
+                    .parse(lang_type, &file_content, Some(old_tree))?;
                 trees.insert(file_name.to_string(), new_tree);
             }
             None => {
                 // tree doesn't exist, first insertion
-                let new_tree = self.parsers.parse(lang_type, file_content, None)?;
+                let new_tree = self.parsers.parse(lang_type, &file_content, None)?;
                 trees.insert(file_name.to_string(), new_tree);
             }
         };
@@ -156,6 +158,7 @@ impl LspFiles {
         let trees = self.trees.get_mut(&lang_type)?;
         let old_tree = trees.get_mut(file)?;
         old_tree.edit(&input_edit);
+        let code = remove_unicode_content(&code);
         let new_tree = self.parsers.parse(lang_type, &code, Some(old_tree))?;
         let trees = self.trees.get_mut(&lang_type)?;
         trees.insert(file.to_string(), new_tree);
@@ -210,7 +213,7 @@ impl LspFiles {
         let rope = self.documents.get(name)?;
         let mut writter = FileContent::default();
         let _ = rope.write_to(&mut writter);
-        let content = writter.content;
+        let content = remove_unicode_content(&writter.content);
         let lang_type = self.config.file_ext(&Path::new(name))?;
         let trees = self.trees.get(&lang_type)?;
         let tree = trees.get(name)?;
@@ -231,9 +234,9 @@ impl LspFiles {
         let path = Path::new(&uri);
         let lang_type = self.config.file_ext(&path)?;
         let doc = self.documents.get(uri)?;
-        let mut contents = FileContent::default();
-        let _ = doc.write_to(&mut contents);
-        let content = contents.content;
+        let mut content = FileContent::default();
+        let _ = doc.write_to(&mut content);
+        let content = remove_unicode_content(&content.content);
         self.delete_variables(uri);
         self.add_variables(uri, lang_type, &content);
         let mut hm = HashMap::new();
@@ -275,6 +278,7 @@ impl LspFiles {
         let doc = self.documents.get(&uri)?;
         let mut writter = FileContent::default();
         let _ = doc.write_to(&mut writter);
+        writter.content = remove_unicode_content(&writter.content);
         match ext {
             LangType::Template => {
                 let query = &self.queries.jinja_snippets;
@@ -358,6 +362,7 @@ impl LspFiles {
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
+        writter.content = remove_unicode_content(&writter.content);
         let objects = objects_query(query, tree, trigger_point, &writter.content, false);
         if objects.is_hover(trigger_point) {
             let object = objects.get_last_id()?;
@@ -395,6 +400,7 @@ impl LspFiles {
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
+        writter.content = remove_unicode_content(&writter.content);
 
         let mut current_ident = String::new();
 
@@ -496,6 +502,7 @@ impl LspFiles {
                 let doc = self.documents.get(&uri)?;
                 let mut writter = FileWriter::default();
                 let _ = doc.write_to(&mut writter);
+                writter.content = remove_unicode_content(&writter.content);
                 let code_action = code_actions
                     .iter()
                     .find(|item| point >= item.start && point <= item.end);
@@ -815,7 +822,6 @@ impl LspFiles {
         let rope = self.documents.get(uri.as_str())?;
         let mut writter = FileContent::default();
         let _ = rope.write_to(&mut writter);
-        let content = writter.content;
         let lang_type = self.config.file_ext(&Path::new(uri.as_str()))?;
         let trees = self.trees.get(&lang_type)?;
         let tree = trees.get(uri.as_str())?;
@@ -823,7 +829,7 @@ impl LspFiles {
             &self.queries.jinja_objects,
             tree,
             Point::new(0, 0),
-            &content,
+            &writter.content,
             true,
         );
         let objects = objects.show();

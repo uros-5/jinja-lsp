@@ -25,6 +25,7 @@ pub struct JinjaConfig {
     pub user_defined: bool,
     pub hide_undefined: Option<bool>,
     pub template_extensions: Vec<String>,
+    pub filters: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -37,6 +38,7 @@ pub struct OptionalJinjaConfig {
     pub user_defined: Option<bool>,
     pub hide_undefined: Option<Option<bool>>,
     pub template_extensions: Option<Vec<String>>,
+    pub filters: Option<Vec<String>>,
 }
 
 impl Default for JinjaConfig {
@@ -48,6 +50,7 @@ impl Default for JinjaConfig {
             user_defined: false,
             hide_undefined: Some(false),
             template_extensions: vec!["html".to_string(), "jinja".to_string(), "j2".to_string()],
+            filters: vec![],
         }
     }
 }
@@ -70,6 +73,10 @@ impl From<OptionalJinjaConfig> for JinjaConfig {
 
         if let Some(new_extensions) = value.template_extensions {
             new_template_extensions(&mut config, Some(new_extensions));
+        }
+
+        if let Some(custom_filters) = value.filters {
+            config.filters = custom_filters;
         }
 
         config

@@ -681,17 +681,17 @@ impl From<CompletionItemKind> for Kind2 {
     if value == CompletionItemKind::VARIABLE {
       Kind2::VARIABLE
     } else if value == CompletionItemKind::FIELD {
-      return Kind2::FIELD;
+      Kind2::FIELD
     } else if value == CompletionItemKind::FUNCTION {
-      return Kind2::FUNCTION;
+      Kind2::FUNCTION
     } else if value == CompletionItemKind::MODULE {
-      return Kind2::MODULE;
+      Kind2::MODULE
     } else if value == CompletionItemKind::CONSTANT {
-      return Kind2::CONSTANT;
+      Kind2::CONSTANT
     } else if value == CompletionItemKind::FILE {
-      return Kind2::FILE;
+      Kind2::FILE
     } else {
-      return Kind2::VARIABLE;
+      Kind2::VARIABLE
     }
   }
 }

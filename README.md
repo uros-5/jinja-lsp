@@ -138,6 +138,18 @@ require('lazy').setup(
 template_extensions = ["j2", "tex"]
 ```
 
+## Custom jinja filters
+
+```
+filters = ["./example/custom-filters"]
+```
+
+```md
+**filter_name**
+
+markdown description
+```
+
 You can also write configuration in: `pyproject.toml`, `Cargo.toml`, `jinja-lsp.toml`.
 
 Python

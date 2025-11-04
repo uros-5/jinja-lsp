@@ -24,12 +24,12 @@ use crate::channels::{
     lsp::{lsp_task, LspMessage},
 };
 
-pub struct Backend {
+pub struct _Backend {
     main_channel: Sender<LspMessage>,
 }
 
 #[tower_lsp::async_trait]
-impl LanguageServer for Backend {
+impl LanguageServer for _Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let (sender, rx) = oneshot::channel();
         let _ = self
@@ -153,7 +153,7 @@ impl LanguageServer for Backend {
     }
 }
 
-impl Backend {
+impl _Backend {
     pub fn _new(client: Client) -> Self {
         let (lsp_sender, lsp_recv) = mpsc::channel(50);
         let (diagnostic_sender, diagnostic_recv) = mpsc::channel(20);

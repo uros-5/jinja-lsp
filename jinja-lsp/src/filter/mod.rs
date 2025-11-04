@@ -1,4 +1,9 @@
+use std::fs;
+
+use ignore::Walk;
 use serde::{Deserialize, Serialize};
+
+use crate::config::JinjaConfig;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FilterCompletion {
@@ -56,4 +61,43 @@ pub fn init_filter_completions() -> Vec<FilterCompletion> {
         FilterCompletion::from(("upper", include_str!("md/filters/upper.md"))),
         FilterCompletion::from(("urlencode", include_str!("md/filters/urlencode.md"))),
     ]
+}
+pub fn add_custom_filter_completions(filters: &mut Vec<FilterCompletion>, config: &JinjaConfig) {
+    for directory in &config.filters {
+        let walk = Walk::new(directory);
+        for entry in walk.into_iter() {
+            let Ok(entry) = entry else { continue };
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if !metadata.is_file() {
+                continue;
+            }
+            let file_content = fs::read_to_string(entry.path());
+            let Ok(file_content) = file_content else {
+                continue;
+            };
+            let Some(file_name) = entry.path().file_stem() else {
+                continue;
+            };
+            let Some(file_name) = file_name.to_str() else {
+                continue;
+            };
+            let Some(index) = filters.iter().position(|item| item.name == file_name) else {
+                filters.push(FilterCompletion {
+                    name: file_name.to_string(),
+                    desc: file_content,
+                });
+                continue;
+            };
+            let Some(filter_item) = filters.get_mut(index) else {
+                filters.push(FilterCompletion {
+                    name: file_name.to_string(),
+                    desc: file_content,
+                });
+                continue;
+            };
+            filter_item.desc = file_content;
+        }
+    }
 }

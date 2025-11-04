@@ -22,7 +22,7 @@ use tower_lsp::{
 
 use crate::{
     config::{new_template_extensions, search_config, walkdir, JinjaConfig},
-    filter::init_filter_completions,
+    filter::{add_custom_filter_completions, init_filter_completions},
     lsp_files::LspFiles,
     template_tests::init_template_test_completions,
 };
@@ -37,7 +37,7 @@ pub fn lsp_task(
 ) {
     let mut config = JinjaConfig::default();
     let mut lsp_data = LspFiles::default();
-    let filters = init_filter_completions();
+    let mut filters = init_filter_completions();
     let template_tests = init_template_test_completions();
     let snippets = snippets();
     tokio::spawn(async move {
@@ -60,6 +60,7 @@ pub fn lsp_task(
                             Some(config)
                         })
                         .unwrap_or(search_config().unwrap_or(config));
+                    add_custom_filter_completions(&mut filters, &config);
 
                     let definition_provider = Some(OneOf::Left(true));
                     let references_provider = None;

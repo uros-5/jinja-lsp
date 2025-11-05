@@ -68,11 +68,14 @@ impl LspFiles {
             let name = name.to_str()?;
             let file_content = read_to_string(name).ok()?;
             let rope = Rope::from_str(&file_content);
+
             let name = format!("file://{}", name);
-            let adding = name.clone();
-            self.documents.insert(name.to_string(), rope);
-            self.add_tree(&name, lang_type, &file_content);
-            self.add_variables(&adding, lang_type, &file_content);
+            let url = Url::parse(&name);
+            let Ok(url) = url else { return None };
+
+            self.documents.insert(url.to_string(), rope);
+            self.add_tree(url.as_ref(), lang_type, &file_content);
+            self.add_variables(url.as_ref(), lang_type, &file_content);
         }
         None
     }

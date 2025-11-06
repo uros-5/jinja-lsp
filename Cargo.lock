@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp"
-version = "0.1.89"
+version = "0.1.90"
 dependencies = [
  "anyhow",
  "clap",
@@ -523,7 +523,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-nodejs"
-version = "0.1.85"
+version = "0.1.90"
 dependencies = [
  "jinja-lsp",
  "jinja-lsp-queries",
@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.89"
+version = "0.1.90"
 dependencies = [
  "ropey",
  "tower-lsp",

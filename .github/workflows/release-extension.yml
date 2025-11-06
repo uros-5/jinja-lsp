@@ -1,0 +1,60 @@
+name: release-extension
+
+on:
+  workflow_dispatch  
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+
+      - name: Get latest release version
+        run: |
+          LATEST_TAG=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          echo "Latest release is: $LATEST_TAG"        
+          echo "LATEST_TAG=$LATEST_TAG"
+          echo "version=$LATEST_TAG" >> $GITHUB_ENV          
+          
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      
+      - name: Download and extract extension
+        run: |
+          echo $LATEST_TAG
+          wget "https://github.com/uros-5/jinja-lsp/releases/download/${{ env.version }}/jinja-lsp.zip"
+          mkdir binaries
+          unzip jinja-lsp -d binaries
+          mkdir extensions
+
+      - name: Npm install
+        run: |
+          npm install
+          npm install @vscode/vsce -g
+          npm install vscode-languageclient
+          npm install ovsx -g
+        working-directory: editors/code
+        
+      - name: Build extensions
+        run: |
+          sh build-all.sh
+        working-directory: editors/code
+
+      - name: Release extension
+        run: |
+          npx vsce publish --pat ${{ secrets.VSCODE_TOKEN }} --packagePath ../../extensions/jinja-lsp*.vsix          
+          npx ovsx publish --pat ${{ secrets.OPEN_VSX_TOKEN }} --packagePath ../../extensions/jinja-lsp*.vsix
+        working-directory: editors/code
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jinja-lsp-extension
+          path: ./extensions

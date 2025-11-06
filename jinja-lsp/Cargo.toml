@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp"
-version = "0.1.89"
+version = "0.1.90"
 edition = "2021"
 license = "MIT"
 authors = ["uros-5"]

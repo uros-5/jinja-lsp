@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp"
-version = "0.1.90"
+version = "0.1.91"
 edition = "2021"
 license = "MIT"
 authors = ["uros-5"]
@@ -35,3 +35,4 @@ tree-sitter-language = "0.1.0"
 toml = {version = "0.8.19", features = ["display"]}
 clap = { version = "4.5.39", features = ["derive"] }
 ignore = "0.4.23"
+glob = "0.3.3"

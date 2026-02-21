@@ -21,7 +21,7 @@ use tower_lsp::{
 };
 
 use crate::{
-    config::{new_template_extensions, search_config, walkdir, JinjaConfig},
+    config::{new_template_extensions, search_config, walkdir, JinjaConfig, OptionalJinjaConfig},
     filter::{add_custom_filter_completions, init_filter_completions},
     lsp_files::LspFiles,
     template_tests::init_template_test_completions,
@@ -54,8 +54,9 @@ pub fn lsp_task(
                         .map(serde_json::from_value)
                         .map(|res| res.ok())
                         .and_then(|c| {
-                            let mut config: JinjaConfig = c?;
-                            config.user_defined = true;
+                            let mut config: OptionalJinjaConfig = c?;
+                            config.user_defined = Some(true);
+                            let mut config = JinjaConfig::from(config);
                             new_template_extensions(&mut config, None);
                             Some(config)
                         })

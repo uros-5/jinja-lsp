@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use glob::glob;
 use ignore::Walk;
 use jinja_lsp_queries::{
     search::Identifier,
@@ -79,6 +80,10 @@ impl From<OptionalJinjaConfig> for JinjaConfig {
             config.filters = custom_filters;
         }
 
+        if let Some(user_defined) = value.user_defined {
+            config.user_defined = user_defined;
+        }
+
         config
     }
 }
@@ -148,13 +153,20 @@ pub type InitLsp = (
 );
 
 pub fn walkdir(config: &JinjaConfig) -> anyhow::Result<InitLsp> {
-    let mut all = vec![config
-        .clone()
-        .templates
-        .to_str()
-        .unwrap()
-        .to_string()
-        .clone()];
+    let templates = glob(config.templates.to_str().unwrap())
+        .expect("Failed to read glob pattern")
+        .collect::<Vec<_>>()
+        .first()
+        .map(|item| {
+            if let Ok(item) = item {
+                item.clone()
+            } else {
+                config.templates.clone()
+            }
+        })
+        .unwrap_or(config.templates.clone());
+
+    let mut all = vec![templates.to_str().unwrap().to_string().clone()];
     let mut backend = config.backend.clone();
     all.append(&mut backend);
     let mut lsp_files = LspFiles::default();

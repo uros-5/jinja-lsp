@@ -2,7 +2,7 @@
   "name": "jinja-lsp",
   "description": "jinja-lsp",
   "license": "MIT",
-  "version": "0.1.90",
+  "version": "0.1.91",
   "repository": {
     "url": "https://github.com/uros-5/jinja-lsp"
   },

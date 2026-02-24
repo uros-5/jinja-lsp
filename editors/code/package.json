@@ -2,7 +2,7 @@
   "name": "jinja-lsp",
   "description": "jinja-lsp",
   "license": "MIT",
-  "version": "0.1.91",
+  "version": "0.1.92",
   "repository": {
     "url": "https://github.com/uros-5/jinja-lsp"
   },
@@ -37,11 +37,13 @@
       "properties": {
         "jinja-lsp.templates": {
           "type": "string",
-          "description": "Templates directory"
+          "description": "Templates directory",
+          "default": null
         },
         "jinja-lsp.backend": {
           "type": "array",
-          "description": "Backend directories"
+          "description": "Backend directories",
+          "default": null
         },
         "jinja-lsp.lang": {
           "type": "string",
@@ -49,11 +51,13 @@
             "rust",
             "python"
           ],
-          "description": "Language that is used on backend"
+          "description": "Language that is used on backend",
+          "default": null
         },
         "jinja-lsp.hide_undefined": {
           "type": "boolean",
-          "description": "Disable warnings about undefined variables"
+          "description": "Disable warnings about undefined variables",
+          "default": null
         },
         "jinja-lsp.template_extension": {
           "type": "array",

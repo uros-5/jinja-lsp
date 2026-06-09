@@ -3,7 +3,8 @@ resolver = "2"
 members = [
     "jinja-lsp-queries",
     "jinja-lsp",
-    "jinja-lsp-nodejs"
+    "jinja-lsp-nodejs",
+    "editors/zed"
 ]
 
 [profile.dev]

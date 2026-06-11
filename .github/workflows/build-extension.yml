@@ -1,7 +1,10 @@
 name: build-extension
 
-on:
-  workflow_dispatch  
+on: [workflow_dispatch, workflow_call]
+
+
+env:
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   build:
@@ -42,7 +45,7 @@ jobs:
         
       - name: Build extensions
         run: |
-          sh build-all.sh
+          bash build_vsix.sh
         working-directory: editors/code
 
       - name: Upload artifacts

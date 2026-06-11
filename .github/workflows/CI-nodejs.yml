@@ -1,4 +1,4 @@
-name: CI
+name: CI NodeJS
 env:
   DEBUG: napi:*
   APP_NAME: functions

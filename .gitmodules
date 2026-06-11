@@ -1,0 +1,3 @@
+[submodule "editors/zed"]
+	path = editors/zed
+	url = git@github.com:uros-5/jinja-lsp-zed.git

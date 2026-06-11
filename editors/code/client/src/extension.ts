@@ -13,7 +13,6 @@ import {
 } from 'vscode-languageclient/node';
 import * as child_process from 'child_process';
 import * as vscode from "vscode";
-import { binaryName } from './binaryName';
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
@@ -71,6 +70,10 @@ export function deactivate(): Thenable<void> | undefined {
 function getServer(_output: vscode.OutputChannel, cwd: string): { valid: boolean, name: string } {
 	try {
 		// let name = "/home/uros/.cache/cargo/target/debug/jinja-lsp";
+		let binaryName = "jinja-lsp"
+		if(process.platform == "win32") {
+			binaryName += ".exe"
+		}
 		let name = path.join(cwd, "media", binaryName);
 		const validation = child_process.spawnSync(name);
 		if (validation.status === 0) {

@@ -31,3 +31,5 @@ extraPaths = ["example/.venv/lib/python3.10/site-packages"]
 
 [tool.jinja-lsp]
 hide_undefined = false
+templates = "./templates"
+backend = ["./src"]

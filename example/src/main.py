@@ -3,9 +3,8 @@ from jinja2 import Environment
 
 def main():
     jinja_env = Environment()
-
-    template = jinja_env.get_template("account.jinja")
-    template.render(
+    template = jinja_env.get_template("./account.jinja")
+    _result = template.render(
         first_name="John",
         last_name="Doe",
         email="johndoe@example.com",

@@ -26,13 +26,12 @@ jobs:
         with:
           node-version: 22
       
-      - name: Download and extract extension
+      - name: Download binaries
         run: |
-          echo $LATEST_TAG
-          wget "https://github.com/uros-5/jinja-lsp/releases/download/${{ env.version }}/jinja-lsp.zip"
-          mkdir binaries
-          unzip jinja-lsp -d binaries
-          mkdir extensions
+          mkdir -p binaries extensions
+          gh release download "${{ env.version }}" \
+            --pattern "jinja-lsp-*" \
+            --dir binaries
 
       - name: Npm install
         run: |

@@ -23,12 +23,12 @@ impl Default for Queries {
             jinja_definitions: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), DEFINITIONS)
                 .unwrap(),
             jinja_objects: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), OBJECTS).unwrap(),
+            jinja_imports: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_IMPORTS).unwrap(),
+            jinja_snippets: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_SNIPPETS)
+                .unwrap(),
             backend_definitions: Query::new(&tree_sitter_rust::LANGUAGE.into(), RUST_DEFINITIONS)
                 .unwrap(),
-            jinja_imports: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_IMPORTS).unwrap(),
             backend_templates: Query::new(&tree_sitter_rust::LANGUAGE.into(), RUST_TEMPLATES)
-                .unwrap(),
-            jinja_snippets: Query::new(&tree_sitter_jinja2::LANGUAGE.into(), JINJA_SNIPPETS)
                 .unwrap(),
             python_identifiers: Query::new(
                 &tree_sitter_python::LANGUAGE.into(),
@@ -229,6 +229,7 @@ const DEFINITIONS: &str = r#"
 "#;
 
 const PYTHON_TEMPLATES: &str = r#"
+
 (call
     [
       (attribute
@@ -241,6 +242,35 @@ const PYTHON_TEMPLATES: &str = r#"
       (string)+ @template_name
     )
 )
+
+(call
+	function: (attribute
+    	attribute: (identifier) @method_name
+        (#eq? @method_name "TemplateResponse")
+    )
+  arguments: (argument_list
+  	(keyword_argument
+      	name: (identifier) @name_kw
+        value: (string) @template_name
+          (#eq? @name_kw "name")
+      )
+  )
+)
+
+
+(call
+	function: (attribute
+    	attribute: (identifier) @star_api
+        (#eq? @star_api "TemplateResponse")
+    )
+  arguments: (argument_list
+  	(_)
+    (string) @template_name
+  )
+)
+
+
+
 "#;
 
 pub static PYTHON_DEFINITIONS: &str = r#"
@@ -259,31 +289,53 @@ pub static PYTHON_DEFINITIONS: &str = r#"
   )
 )
 
-(	
-	[
-      (call
-        function: (identifier) @method
-        arguments: (argument_list
-        	(keyword_argument
-            	name: (identifier) @key_id
+(
+  
+    [
+    	(call
+        	function: (attribute
+            	attribute: (identifier) @method
+            )
+            arguments: (argument_list
+              (keyword_argument
+                  name: (identifier) @key_id
+              )
             )
         )
-      )
-      
-      (call
-        function: (attribute
-          object: (identifier)
-          attribute: (identifier) @method
-        ) 
-        arguments: (argument_list
-        	(keyword_argument
-            	name: (identifier) @key_id
+  
+        (call
+            function: (identifier) @method
+            arguments: (argument_list
+            	(keyword_argument
+                	name: (identifier) @key_id
+                )
             )
         )
-      )
     ]
-	(#match? @method "^(render_template|render)$")
+    (#match? @method "^(render_template|render)$")
+  
+)
+
+
+(call
+	function: (attribute
+    	attribute: (identifier) @star_api
+        (#eq? @star_api "TemplateResponse")
+    )
+  arguments: (argument_list
+  	(keyword_argument
+      	name: (identifier) @context_kw
+        value: (dictionary
+        	(pair
+            	key: (string
+                	(string_content) @key_id
+                )
+            )
+        )
+          (#eq? @context_kw "context")
+      )
   )
+)
   
   (ERROR) @error
 

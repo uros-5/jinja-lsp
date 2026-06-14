@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp"
-version = "0.1.91"
+version = "0.1.92"
 dependencies = [
  "anyhow",
  "clap",
@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-nodejs"
-version = "0.1.90"
+version = "0.1.92"
 dependencies = [
  "jinja-lsp",
  "jinja-lsp-queries",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "jinja-lsp-queries"
-version = "0.1.90"
+version = "0.1.92"
 dependencies = [
  "ropey",
  "tower-lsp",
@@ -1204,9 +1204,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-jinja2"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba9be18e38ec1489ff72f519781d2aecc113563c2d5bddfbd9797888ea396af7"
+checksum = "95559f2891f7cd3a9d0e891530244971be3f8d0ecfa14290913f6b6e5fef8b2d"
 dependencies = [
  "cc",
  "tree-sitter-language",

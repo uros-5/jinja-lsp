@@ -66,4 +66,4 @@ pub fn backend_templates_query(
     templates
 }
 
-static METHODS: [&str; 2] = ["render_jinja", "get_template"];
+static METHODS: [&str; 3] = ["render_jinja", "get_template", "TemplateResponse"];

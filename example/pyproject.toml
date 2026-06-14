@@ -6,10 +6,14 @@ authors = [
     { name = "uros-5"}
 ]
 dependencies = [
+    "fastapi[standard]>=0.136.3",
     "jinja2>=3.1.4",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
+
+[project.scripts]
+example = "main:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -22,8 +26,8 @@ dev-dependencies = []
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
+[tool.hatch.build.targets.wheel.force-include]
+"src/main.py" = "main.py"
 
 [tool.pyright]
 extraPaths = ["example/.venv/lib/python3.10/site-packages"] 

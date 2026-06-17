@@ -11,6 +11,7 @@ pub enum LangType {
 #[derive(PartialEq, Eq, Debug)]
 pub enum JinjaDiagnostic {
     Undefined,
+    DefinedInMultiplePlaces,
     TemplateNotFound,
 }
 
@@ -19,6 +20,7 @@ impl JinjaDiagnostic {
         match &self {
             JinjaDiagnostic::Undefined => DiagnosticSeverity::WARNING,
             JinjaDiagnostic::TemplateNotFound => DiagnosticSeverity::ERROR,
+            JinjaDiagnostic::DefinedInMultiplePlaces => DiagnosticSeverity::INFORMATION,
         }
     }
 }
@@ -28,6 +30,7 @@ impl Display for JinjaDiagnostic {
         match self {
             JinjaDiagnostic::Undefined => f.write_str("Undefined variable"),
             JinjaDiagnostic::TemplateNotFound => f.write_str("Template not found"),
+            JinjaDiagnostic::DefinedInMultiplePlaces => f.write_str("Defined in multiple places."),
         }
     }
 }

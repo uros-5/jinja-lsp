@@ -61,19 +61,22 @@ pub fn search_errors(
                     if ignore_globals {
                         continue;
                     }
-                    // to_warn = true;
                     to_warn = true;
+                    let mut count = 0;
                     for file in variables {
-                        let temp = file
+                        let idents = file
                             .1
                             .iter()
                             .filter(|variable| variable.name == object.name);
-                        if temp.count() != 0 {
-                            // err_type = JinjaDiagnostic::DefinedSomewhere;
-                            // to_warn = true;
-                            to_warn = false;
+                        count += idents.count();
+                        if count > 1 {
+                            err_type = JinjaDiagnostic::DefinedInMultiplePlaces;
+                            to_warn = true;
                             break;
                         }
+                    }
+                    if count == 1 {
+                        to_warn = false;
                     }
                 }
                 if to_warn {

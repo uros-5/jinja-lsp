@@ -61,6 +61,7 @@ pub fn search_errors(
                     if ignore_globals {
                         continue;
                     }
+                    // to_warn = true;
                     to_warn = true;
                     for file in variables {
                         let temp = file
@@ -68,8 +69,9 @@ pub fn search_errors(
                             .iter()
                             .filter(|variable| variable.name == object.name);
                         if temp.count() != 0 {
-                            err_type = JinjaDiagnostic::DefinedSomewhere;
-                            to_warn = true;
+                            // err_type = JinjaDiagnostic::DefinedSomewhere;
+                            // to_warn = true;
+                            to_warn = false;
                             break;
                         }
                     }

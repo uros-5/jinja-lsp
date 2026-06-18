@@ -12,9 +12,9 @@ use tower_lsp::{
         DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
         DocumentSymbolResponse, Documentation, ExecuteCommandOptions, ExecuteCommandParams,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, InitializeResult, InsertReplaceEdit,
-        MarkupContent, MarkupKind, MessageType, OneOf, ServerCapabilities, ServerInfo,
-        TextDocumentIdentifier, TextDocumentSyncCapability, TextDocumentSyncKind,
+        HoverProviderCapability, InitializeParams, InitializeResult, InsertReplaceEdit, Location,
+        MarkupContent, MarkupKind, MessageType, OneOf, ReferenceParams, ServerCapabilities,
+        ServerInfo, TextDocumentIdentifier, TextDocumentSyncCapability, TextDocumentSyncKind,
         TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit,
     },
     Client,
@@ -64,7 +64,7 @@ pub fn lsp_task(
                     add_custom_filter_completions(&mut filters, &config);
 
                     let definition_provider = Some(OneOf::Left(true));
-                    let references_provider = None;
+                    let references_provider = Some(OneOf::Left(true));
                     let code_action_provider = Some(CodeActionProviderCapability::Simple(true));
                     let hover_provider = Some(HoverProviderCapability::Simple(true));
                     let execute_command_provider = Some(ExecuteCommandOptions {
@@ -316,6 +316,11 @@ pub fn lsp_task(
                         let _ = sender.send(Some(definition));
                     }
                 }
+                LspMessage::GoToReferences(params, sender) => {
+                    if let Some(definition) = lsp_data.goto_references(params) {
+                        let _ = sender.send(Some(definition));
+                    }
+                }
                 LspMessage::CodeAction(params, sender) => {
                     let param = DidSaveTextDocumentParams {
                         text_document: TextDocumentIdentifier::new(
@@ -395,4 +400,5 @@ pub enum LspMessage {
     ),
     DidChangeConfiguration(DidChangeConfigurationParams),
     CodeActions(HashMap<String, Vec<Identifier>>),
+    GoToReferences(ReferenceParams, oneshot::Sender<Option<Vec<Location>>>),
 }

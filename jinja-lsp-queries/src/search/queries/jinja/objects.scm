@@ -1,9 +1,8 @@
 (
     [
-        (
-            (operator) @dot
-            (#eq? @dot "\.")
-        )
+        (dotted_identifier
+          attribute: (identifier) @attribute
+        ) @object
 
         (
           (identifier) @just_id

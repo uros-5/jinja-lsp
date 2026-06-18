@@ -45,9 +45,10 @@ pub fn search_errors(
                     })
                     .filter(|variable| {
                         exist = true;
-                        let bigger = object.location.1 >= variable.start;
+                        let location = object.location();
+                        let bigger = location.1 >= variable.start;
                         let global = variable.scope_ends.1 == Point::default();
-                        let in_scope = object.location.0 < variable.scope_ends.1;
+                        let in_scope = location.0 < variable.scope_ends.1;
                         if bigger && global {
                             true
                         } else {

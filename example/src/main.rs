@@ -11,5 +11,6 @@ fn main() {
         city => "Dallas",
         header_info => "This is some information about the user.",
     };
+
     jinja.add_global("PROJECT_NAME", "Example");
 }

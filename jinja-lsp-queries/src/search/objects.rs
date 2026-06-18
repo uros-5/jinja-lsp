@@ -6,22 +6,24 @@ use super::{completion_start, to_range, to_range2, Identifier};
 #[derive(Default, Debug, Clone)]
 pub struct JinjaObject {
     pub name: String,
-    pub location: (Point, Point),
     pub is_filter: bool,
     pub is_test: bool,
     pub fields: Vec<(String, (Point, Point))>,
     pub capture_first: bool,
+    pub is_object: bool,
+    pub location: (Point, Point),
 }
 
 impl JinjaObject {
-    pub fn new(name: String, start: Point, end: Point, is_filter: bool, is_test: bool) -> Self {
+    pub fn new(name: String, is_filter: bool, is_test: bool) -> Self {
         Self {
             name,
-            location: (start, end),
             fields: vec![],
             is_filter,
             capture_first: false,
             is_test,
+            is_object: false,
+            location: Default::default(),
         }
     }
 
@@ -30,58 +32,45 @@ impl JinjaObject {
     }
 
     pub fn last_field_end(&self) -> Point {
-        let last = self.fields.last().map_or(self.location.1, |v| v.1 .1);
+        let last = self.fields.last().unwrap().1 .1;
         last
     }
 
     pub fn full_range(&self) -> Range {
-        let start = self.location.0;
+        to_range(self.location())
+    }
+
+    pub fn location(&self) -> (Point, Point) {
+        if self.is_object {
+            return self.location;
+        }
+        let start = self.fields.first().unwrap().1 .0;
         let end = self.last_field_end();
-        to_range((start, end))
+        (start, end)
     }
 }
 
 #[derive(Default, Debug)]
 pub struct JinjaObjects {
     objects: Vec<JinjaObject>,
-    dot: (Point, Point),
     pipe: (Point, Point),
     test: (Point, Point, bool),
     expr: (Point, Point, ExpressionRange),
     ident: (Point, Point),
+    previous_nodes: Vec<usize>,
 }
 
 impl JinjaObjects {
-    fn check(
+    fn collect(
         &mut self,
-        name: &str,
+        capture_name: &str,
         capture: &QueryCapture<'_>,
         source: &str,
-    ) -> Option<ObjectAction> {
+    ) -> Option<ObjectState> {
         let start = capture.node.start_position();
         let end = capture.node.end_position();
-        match name {
-            "error" => {
-                return None;
-            }
-            "just_id" => {
-                return Some(self.build_object(capture, source));
-            }
-            "dot" => {
-                self.dot = (start, end);
-                return Some(ObjectAction::NewField);
-            }
-            "pipe" => {
-                let content = capture.node.utf8_text(source.as_bytes()).ok()?;
-                if content.starts_with('|') {
-                    self.pipe = (start, end);
-                }
-                return Some(ObjectAction::NewFilter);
-            }
-            "is" => {
-                self.test = (start, end, true);
-                return Some(ObjectAction::NewTest);
-            }
+        let value = capture.node.utf8_text(source.as_bytes());
+        match capture_name {
             "expr" => {
                 let mut cursor = capture.node.walk();
                 cursor.goto_first_child();
@@ -94,60 +83,74 @@ impl JinjaObjects {
                     end: (last.start_position(), last.end_position()),
                 };
                 self.expr = (start, end, expr);
-                return Some(ObjectAction::Expression);
+                return Some(ObjectState::Expression);
+            }
+            "object" => {
+                if self.previous_nodes.contains(&capture.node.id()) {
+                    return Some(ObjectState::NewObject);
+                }
+                let mut object = JinjaObject::default();
+                object.is_object = true;
+                object.location = (start, end);
+                self.objects.push(object);
+                self.previous_nodes.push(capture.node.id());
+                return Some(ObjectState::NewObject);
+            }
+            "attribute" => {
+                if self.previous_nodes.contains(&capture.node.id()) {
+                    return Some(ObjectState::Attribute);
+                }
+                self.previous_nodes.push(capture.node.id());
+                if let Ok(value) = value {
+                    if VALID_IDENTIFIERS.contains(&value) {
+                        return Some(ObjectState::Invalid);
+                    }
+                    let last = self.objects.last_mut()?;
+                    last.fields.push((value.to_string(), (start, end)));
+                    if last.name == "" {
+                        last.name = last.fields.first().unwrap().0.to_string();
+                    }
+                    self.ident = (start, end);
+                    self.test.2 = false;
+                }
+                return Some(ObjectState::Attribute);
+            }
+            "just_id" => {
+                if self.previous_nodes.contains(&capture.node.id()) {
+                    return Some(ObjectState::NewObject);
+                }
+                self.previous_nodes.push(capture.node.id());
+                if let Ok(value) = value {
+                    if VALID_IDENTIFIERS.contains(&value) {
+                        return Some(ObjectState::Invalid);
+                    }
+                    self.ident = (start, end);
+                    let is_test = self.test.2;
+                    let is_filter = self.is_hover(start) && self.is_filter();
+                    let mut object = JinjaObject::new(String::from(value), is_filter, is_test);
+                    object.fields.push((String::from(value), (start, end)));
+                    self.objects.push(object);
+                    self.test.2 = false;
+                }
+                return Some(ObjectState::NewObject);
+            }
+            "pipe" => {
+                let content = capture.node.utf8_text(source.as_bytes()).ok()?;
+                if content.starts_with('|') {
+                    self.pipe = (start, end);
+                }
+                return Some(ObjectState::NewObject);
+            }
+            "is" => {
+                self.test = (start, end, true);
+                return Some(ObjectState::NewTest);
+            }
+            "error" => {
+                return None;
             }
             _ => (),
         }
-        Some(ObjectAction::Invalid)
-    }
-
-    pub fn build_object(&mut self, capture: &QueryCapture<'_>, source: &str) -> ObjectAction {
-        let value = capture.node.utf8_text(source.as_bytes());
-        let start = capture.node.start_position();
-        let end = capture.node.end_position();
-        if let Ok(value) = value {
-            if start.row == self.dot.1.row && start.column == self.dot.1.column {
-                let last_object = self.objects.last_mut().map(|last| {
-                    last.fields.push((String::from(value), (start, end)));
-                    self.ident = (start, end);
-                });
-                match last_object {
-                    Some(_) => {}
-                    None => {
-                        // TODO: in future add those to main library
-                        if VALID_IDENTIFIERS.contains(&value) {
-                            return ObjectAction::Invalid;
-                        }
-                        self.ident = (start, end);
-                        let is_test = self.test.2;
-                        let is_filter = self.is_hover(start) && self.is_filter();
-                        let obj =
-                            JinjaObject::new(String::from(value), start, end, is_filter, is_test);
-                        self.objects.push(obj);
-                        self.test.2 = false;
-                        return ObjectAction::NewObject;
-                    }
-                }
-            } else {
-                // TODO: in future add those to main library
-                if VALID_IDENTIFIERS.contains(&value) {
-                    return ObjectAction::Invalid;
-                }
-                self.ident = (start, end);
-                let is_test = self.test.2;
-                let is_filter = self.is_hover(start) && self.is_filter();
-                self.objects.push(JinjaObject::new(
-                    String::from(value),
-                    start,
-                    end,
-                    is_filter,
-                    is_test,
-                ));
-                self.test.2 = false;
-                return ObjectAction::NewObject;
-            }
-        }
-        ObjectAction::Invalid
+        Some(ObjectState::Invalid)
     }
 
     pub fn completion(&self, trigger_point: Point) -> Option<(CompletionType, bool)> {
@@ -162,11 +165,9 @@ impl JinjaObjects {
                 return Some((CompletionType::Identifier, autoclose));
             }
             if let Some(ident_value) = self.is_ident(trigger_point) {
-                // if let Some(ident2) = self.objects.last().map(|last| last) {
+                let range = self.full_range();
                 let identifier = Identifier::new(&ident_value, self.ident.0, self.ident.1);
                 let start = completion_start(trigger_point, &identifier);
-                // let range = to_range((self.ident.0, self.ident.1));
-                let range = self.full_range();
                 return Some((
                     CompletionType::IncompleteIdentifier {
                         name: start?.to_string(),
@@ -174,7 +175,6 @@ impl JinjaObjects {
                     },
                     autoclose,
                 ));
-                // }
             }
             return Some((CompletionType::Identifier, autoclose));
         } else if self.is_test(trigger_point) {
@@ -216,7 +216,7 @@ impl JinjaObjects {
     }
 
     pub fn is_filter(&self) -> bool {
-        self.pipe.1 == self.ident.0
+        self.pipe.1 == self.ident.0 && !self.objects.is_empty()
     }
 
     pub fn get_last_id(&self) -> Option<&JinjaObject> {
@@ -228,6 +228,12 @@ impl JinjaObjects {
     }
 
     pub fn full_range(&self) -> Range {
+        self.objects
+            .last()
+            .map_or(Range::default(), |item| item.full_range())
+    }
+
+    pub fn points(&self) -> Range {
         self.objects
             .last()
             .map_or(Range::default(), |item| item.full_range())
@@ -262,7 +268,7 @@ pub fn objects_query(
             let smaller = trigger_point <= capture.node.start_position();
             if all || trigger_point >= capture.node.start_position() {
                 let name = &capture_names[capture.index as usize];
-                let checked = objects.check(name, capture, text);
+                let checked = objects.collect(name, capture, text);
                 if checked.is_none() {
                     break;
                 }
@@ -281,22 +287,20 @@ pub fn objects_query(
                     }
                 } else if continued {
                     let name = &capture_names[capture.index as usize];
-                    let checked = objects.check(name, capture, text);
+                    let checked = objects.collect(name, capture, text);
                     if checked.is_none() {
                         break;
                     } else if checked.is_some_and(|item| {
                         matches!(
                             item,
-                            ObjectAction::Expression
-                                | ObjectAction::NewObject
-                                | ObjectAction::Invalid
+                            ObjectState::Expression | ObjectState::NewObject | ObjectState::Invalid // | ObjectState::Attribute
                         )
                     }) {
                         objects
                             .objects
                             .get_mut(my_id)
                             .and_then(|obj| -> Option<()> {
-                                objects.ident = obj.location;
+                                objects.ident = obj.location();
                                 obj.capture_first = true;
                                 None
                             });
@@ -334,11 +338,12 @@ pub struct ExpressionRange {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum ObjectAction {
+pub enum ObjectState {
     Expression,
     Invalid,
     NewField,
     NewFilter,
     NewTest,
     NewObject,
+    Attribute,
 }

@@ -484,6 +484,13 @@ impl LspFiles {
         }
     }
 
+    pub fn goto_references(
+        &self,
+        _params: tower_lsp::lsp_types::ReferenceParams,
+    ) -> Option<Vec<Location>> {
+        todo!()
+    }
+
     pub fn code_action(&self, action_params: CodeActionParams) -> Option<JinjaCodeAction> {
         let uri = action_params.text_document.uri.to_string();
         let lang_type = self.config.file_ext(&Path::new(&uri))?;

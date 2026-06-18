@@ -67,6 +67,7 @@ impl LspFiles {
         if let Ok(name) = std::fs::canonicalize(path) {
             let name = name.to_str()?;
             let file_content = read_to_string(name).ok()?;
+            let file_content = remove_unicode_content(&file_content);
             let rope = Rope::from_str(&file_content);
 
             let name = format!("file://{}", name);
@@ -133,7 +134,6 @@ impl LspFiles {
     ) -> Option<()> {
         let trees = self.trees.get_mut(&lang_type)?;
         let old_tree = trees.get_mut(&file_name.to_string());
-        let file_content = remove_unicode_content(file_content);
         match old_tree {
             Some(old_tree) => {
                 let new_tree = self
@@ -161,7 +161,6 @@ impl LspFiles {
         let trees = self.trees.get_mut(&lang_type)?;
         let old_tree = trees.get_mut(file)?;
         old_tree.edit(&input_edit);
-        let code = remove_unicode_content(&code);
         let new_tree = self.parsers.parse(lang_type, &code, Some(old_tree))?;
         let trees = self.trees.get_mut(&lang_type)?;
         trees.insert(file.to_string(), new_tree);
@@ -175,7 +174,8 @@ impl LspFiles {
         let mut changes = vec![];
         for change in params.content_changes {
             let range = change.range?;
-            let input_edit = rope.to_input_edit(range, &change.text);
+            let text = remove_unicode_content(&change.text);
+            let input_edit = rope.to_input_edit(range, &text);
             let start = rope.to_char(range.start);
             let end = rope.to_char(range.end);
             let rope_len = rope.len_chars();
@@ -185,8 +185,8 @@ impl LspFiles {
             } else if rope_len {
                 rope.remove(end..start);
             }
-            if !change.text.is_empty() {
-                rope.insert(start, &change.text);
+            if !text.is_empty() {
+                rope.insert(start, &text);
             }
             let mut w = FileContent::default();
             let _ = rope.write_to(&mut w);
@@ -216,13 +216,12 @@ impl LspFiles {
         let rope = self.documents.get(name)?;
         let mut writter = FileContent::default();
         let _ = rope.write_to(&mut writter);
-        let content = remove_unicode_content(&writter.content);
         let lang_type = self.config.file_ext(&Path::new(name))?;
         let trees = self.trees.get(&lang_type)?;
         let tree = trees.get(name)?;
         search_errors(
             tree,
-            &content,
+            &writter.content,
             &self.queries,
             &self.variables,
             &name.to_string(),
@@ -239,9 +238,8 @@ impl LspFiles {
         let doc = self.documents.get(uri)?;
         let mut content = FileContent::default();
         let _ = doc.write_to(&mut content);
-        let content = remove_unicode_content(&content.content);
         self.delete_variables(uri);
-        self.add_variables(uri, lang_type, &content);
+        self.add_variables(uri, lang_type, &content.content);
         let mut hm = HashMap::new();
         let v = self.read_tree(uri);
         if let Some(v) = v {
@@ -281,7 +279,6 @@ impl LspFiles {
         let doc = self.documents.get(&uri)?;
         let mut writter = FileContent::default();
         let _ = doc.write_to(&mut writter);
-        writter.content = remove_unicode_content(&writter.content);
         match ext {
             LangType::Template => {
                 let query = &self.queries.jinja_snippets;
@@ -365,7 +362,6 @@ impl LspFiles {
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
-        writter.content = remove_unicode_content(&writter.content);
         let objects = objects_query(query, tree, trigger_point, &writter.content, false);
         if objects.is_hover(trigger_point) {
             let object = objects.get_last_id()?;
@@ -403,8 +399,6 @@ impl LspFiles {
         let doc = self.documents.get(&uri)?;
         let mut writter = FileWriter::default();
         let _ = doc.write_to(&mut writter);
-        writter.content = remove_unicode_content(&writter.content);
-
         let mut current_ident = String::new();
 
         match lang_type {
@@ -505,7 +499,6 @@ impl LspFiles {
                 let doc = self.documents.get(&uri)?;
                 let mut writter = FileWriter::default();
                 let _ = doc.write_to(&mut writter);
-                writter.content = remove_unicode_content(&writter.content);
                 let code_action = code_actions
                     .iter()
                     .find(|item| point >= item.start && point <= item.end);
@@ -805,7 +798,7 @@ impl LspFiles {
     ) -> Option<DiagnosticMessage> {
         let name = params.text_document.uri.as_str();
         let lang_type = self.config.file_ext(&Path::new(name))?;
-        let file_content = params.text_document.text;
+        let file_content = remove_unicode_content(&params.text_document.text);
         let rope = Rope::from_str(&file_content);
         self.delete_variables(name);
         self.documents.insert(name.to_string(), rope);

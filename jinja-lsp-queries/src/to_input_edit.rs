@@ -50,7 +50,6 @@ impl ToInputEdit for Rope {
 
         let start_byte = self.to_char(start);
         let start_position = self.to_point(start);
-        let text = remove_unicode_content(text);
 
         let new_end_byte = start_byte + text.chars().count();
         let new_end_position = self.to_position(new_end_byte);

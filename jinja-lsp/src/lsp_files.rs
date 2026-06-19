@@ -10,7 +10,7 @@ use jinja_lsp_queries::{
         rust_template_completion::backend_templates_query,
         snippets_completion::snippets_query,
         templates::templates_query,
-        to_range, Identifier, IdentifierType,
+        to_point, to_range, Identifier, IdentifierType,
     },
     to_input_edit::remove_unicode_content,
     tree_builder::{JinjaDiagnostic, LangType},
@@ -502,35 +502,53 @@ impl LspFiles {
             GotoDefinitionResponse::Scalar(location) => {
                 let mut references = vec![];
                 let ident = self.lsp_response_to_ident(&location)?;
-                self.search_references(&mut references, ident);
+                self.search_references(&mut references, ident, &location);
                 references.push(location);
+                dedup_locations(&mut references);
                 return Some(references);
             }
             GotoDefinitionResponse::Array(locations) => {
                 let mut references = vec![];
                 for location in locations {
-                    dbg!(&location.uri);
                     let ident = self.lsp_response_to_ident(&location)?;
-                    self.search_references(&mut references, ident);
+                    self.search_references(&mut references, ident, &location);
                     references.push(location);
                 }
+                dedup_locations(&mut references);
                 return Some(references);
             }
             GotoDefinitionResponse::Link(_location_links) => None,
         }
     }
 
-    pub fn search_references(&self, references: &mut Vec<Location>, ident: String) -> Option<()> {
+    pub fn search_references(
+        &self,
+        references: &mut Vec<Location>,
+        ident: String,
+        definition_location: &Location,
+    ) -> Option<()> {
         let trees = self.trees.get(&LangType::Template)?;
+        let location = (
+            to_point(definition_location.range.start),
+            to_point(definition_location.range.end),
+        );
 
         for (doc, tree) in trees {
+            // if in my file and that location is present, ignore it
             let query = &self.queries.jinja_objects;
             let rope = self.documents.get(doc)?;
             let mut writter = FileWriter::default();
             let _ = rope.write_to(&mut writter);
             let objects = objects_query(query, tree, Point::default(), &writter.content, true);
+            let same_document = doc == &definition_location.uri.to_string();
+
             for object in objects.show() {
                 if object.name == ident {
+                    if same_document {
+                        if object.location().1 < location.1 {
+                            continue;
+                        }
+                    }
                     references.push(Location {
                         uri: Url::parse(doc).unwrap(),
                         range: object.full_range(),
@@ -1075,6 +1093,19 @@ impl std::io::Write for FileWriter {
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
+}
+
+fn dedup_locations(references: &mut Vec<Location>) {
+    references.sort_by(|a, b| {
+        a.uri
+            .as_str()
+            .cmp(b.uri.as_str())
+            .then(a.range.start.line.cmp(&b.range.start.line))
+            .then(a.range.start.character.cmp(&b.range.start.character))
+            .then(a.range.end.line.cmp(&b.range.end.line))
+            .then(a.range.end.character.cmp(&b.range.end.character))
+    });
+    references.dedup();
 }
 
 pub enum JinjaCodeAction {

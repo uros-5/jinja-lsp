@@ -28,43 +28,37 @@ pub fn search_errors(
             let trigger_point = Point::new(0, 0);
             let query = &queries.jinja_objects;
             let objects = objects_query(query, root, trigger_point, source, true);
-            let objects = objects.show();
+            let objects1 = objects.show();
             let this_file = variables.get(file_name)?;
-            for object in objects {
+            for object in objects1 {
                 if object.is_filter || object.is_test {
                     continue;
                 }
-                let mut exist = false;
                 let mut err_type = JinjaDiagnostic::Undefined;
-                let mut to_warn = false;
                 let located = this_file
                     .iter()
                     .filter(|variable| {
                         variable.name == object.name
                             && variable.identifier_type != IdentifierType::TemplateBlock
                     })
-                    .filter(|variable| {
-                        exist = true;
-                        let location = object.location();
-                        let bigger = location.1 >= variable.start;
-                        let global = variable.scope_ends.1 == Point::default();
-                        let in_scope = location.0 < variable.scope_ends.1;
-                        if bigger && global {
-                            true
-                        } else {
-                            bigger && in_scope
-                        }
+                    .filter(|file_variable| {
+                        let object_location = object.location();
+                        let can_be_used = object_location.1 >= file_variable.start;
+                        let in_scope = object_location.0 < file_variable.scope_ends.1;
+                        can_be_used && in_scope
                     });
                 let empty = located.count() == 0;
-                if empty && exist {
-                    to_warn = true;
-                } else if empty {
+                let mut to_warn = false;
+                if empty {
                     if ignore_globals {
                         continue;
                     }
                     to_warn = true;
                     let mut count = 0;
                     for file in variables {
+                        if file.0 == file_name {
+                            continue;
+                        }
                         let idents = file
                             .1
                             .iter()

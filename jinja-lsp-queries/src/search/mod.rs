@@ -47,30 +47,23 @@ impl Identifier {
 
 impl From<&JinjaObject> for Identifier {
     fn from(value: &JinjaObject) -> Self {
-        let mut identifier = Identifier::new(&value.name, value.location.0, value.location.1);
+        let location = value.location();
+        let mut identifier = Identifier::new(&value.name, location.0, location.1);
         identifier.fields.clone_from(&value.fields);
         identifier
     }
 }
 
-pub fn completion_start(mut trigger_point: Point, identifier: &Identifier) -> Option<&str> {
-    if trigger_point.column > 0 {
-        trigger_point.column -= 1;
-    }
+pub fn completion_start(trigger_point: Point, identifier: &Identifier) -> Option<&str> {
     let len = identifier.name.chars().count();
     if len == 0 {
         return Some("");
     }
-    let diff = identifier.end.column - trigger_point.column;
-    if diff == 0 || diff == 1 {
-        return Some(&identifier.name);
+    let to = trigger_point.column - identifier.start.column;
+    if to <= 0 {
+        return Some("");
     }
-    if diff > len {
-        return Some(&identifier.name);
-        // return None;
-    }
-    let to = len - diff;
-    let s = identifier.name.get(0..to + 1);
+    let s = identifier.name.get(0..to);
     s
 }
 pub fn to_range(points: (Point, Point)) -> Range {

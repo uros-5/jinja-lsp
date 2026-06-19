@@ -391,7 +391,7 @@ mod query_tests {
         let templates = backend_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
             if let Some(completion) = completion_start(trigger_point, template) {
-                assert_eq!(completion, "acco");
+                assert_eq!(completion, "accoun");
             }
         }
     }
@@ -412,7 +412,7 @@ mod query_tests {
         let templates = backend_templates_query(query, &tree, trigger_point, source, false);
         if let Some(template) = templates.in_template(trigger_point) {
             if let Some(completion) = completion_start(trigger_point, template) {
-                assert_eq!(completion, "acco");
+                assert_eq!(completion, "accoun");
             }
         }
     }
@@ -507,7 +507,8 @@ mod query_tests {
         let trigger_point = Point::new(0, 0);
         let objects = objects_query(&query, &tree, trigger_point, text, true).show();
         let object = objects.last().unwrap();
-        assert_eq!(object.location.0, Point::new(0, 12));
-        assert_eq!(object.location.1, Point::new(0, 24));
+        let location = object.location();
+        assert_eq!(location.0, Point::new(0, 12));
+        assert_eq!(location.1, Point::new(0, 24));
     }
 }

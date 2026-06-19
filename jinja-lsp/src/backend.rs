@@ -8,7 +8,7 @@ use tower_lsp::{
     lsp_types::{
         CompletionParams, CompletionResponse, DidChangeConfigurationParams,
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
-        DocumentSymbolResponse, InitializeParams, InitializeResult,
+        DocumentSymbolResponse, InitializeParams, InitializeResult, Location, ReferenceParams,
     },
     Client, LanguageServer,
 };
@@ -100,6 +100,18 @@ impl LanguageServer for _Backend {
             .await;
         if let Ok(definition) = tx.await {
             return Ok(definition);
+        }
+        Ok(None)
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let (sender, tx) = oneshot::channel();
+        let _ = self
+            .main_channel
+            .send(LspMessage::GoToReferences(params, sender))
+            .await;
+        if let Ok(references) = tx.await {
+            return Ok(references);
         }
         Ok(None)
     }

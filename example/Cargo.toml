@@ -6,3 +6,8 @@ edition = "2021"
 
 [dependencies]
 minijinja = "1.0.10"
+
+[metadata.jinja-lsp]
+templates = "./templates"
+backend = ["./src"]
+

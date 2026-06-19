@@ -167,7 +167,8 @@ impl NodejsLspFiles {
               let action_object = ActionObject::from(obj);
               for global_action in global_actions {
                 if global_action.compare(&action_object.fields) {
-                  let mut start = JsPosition::from(obj.location.0);
+                  let location = obj.location();
+                  let mut start = JsPosition::from(location.0);
                   let mut end = JsPosition::from(obj.last_field_end());
                   start.line += line;
                   end.line += line;

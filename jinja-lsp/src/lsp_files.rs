@@ -26,7 +26,8 @@ use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Command, CompletionItemKind,
     CompletionTextEdit, CreateFile, CreateFileOptions, DidOpenTextDocumentParams,
     DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolResponse,
-    InsertReplaceEdit, ResourceOp, TextDocumentIdentifier, TextEdit, WorkspaceEdit,
+    InsertReplaceEdit, PartialResultParams, ResourceOp, TextDocumentIdentifier, TextEdit,
+    WorkDoneProgressParams, WorkspaceEdit,
 };
 
 use jinja_lsp_queries::{
@@ -486,9 +487,68 @@ impl LspFiles {
 
     pub fn goto_references(
         &self,
-        _params: tower_lsp::lsp_types::ReferenceParams,
+        params: tower_lsp::lsp_types::ReferenceParams,
     ) -> Option<Vec<Location>> {
-        todo!()
+        let definition = self.goto_definition(GotoDefinitionParams {
+            text_document_position_params: params.text_document_position,
+            work_done_progress_params: WorkDoneProgressParams {
+                work_done_token: None,
+            },
+            partial_result_params: PartialResultParams {
+                partial_result_token: None,
+            },
+        })?;
+        match definition {
+            GotoDefinitionResponse::Scalar(location) => {
+                let mut references = vec![];
+                let ident = self.lsp_response_to_ident(&location)?;
+                self.search_references(&mut references, ident);
+                references.push(location);
+                return Some(references);
+            }
+            GotoDefinitionResponse::Array(locations) => {
+                let mut references = vec![];
+                for location in locations {
+                    dbg!(&location.uri);
+                    let ident = self.lsp_response_to_ident(&location)?;
+                    self.search_references(&mut references, ident);
+                    references.push(location);
+                }
+                return Some(references);
+            }
+            GotoDefinitionResponse::Link(_location_links) => None,
+        }
+    }
+
+    pub fn search_references(&self, references: &mut Vec<Location>, ident: String) -> Option<()> {
+        let trees = self.trees.get(&LangType::Template)?;
+
+        for (doc, tree) in trees {
+            let query = &self.queries.jinja_objects;
+            let rope = self.documents.get(doc)?;
+            let mut writter = FileWriter::default();
+            let _ = rope.write_to(&mut writter);
+            let objects = objects_query(query, tree, Point::default(), &writter.content, true);
+            for object in objects.show() {
+                if object.name == ident {
+                    references.push(Location {
+                        uri: Url::parse(doc).unwrap(),
+                        range: object.full_range(),
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    pub fn lsp_response_to_ident(&self, location: &Location) -> Option<String> {
+        let doc = self.documents.get(&location.uri.to_string())?;
+        doc.to_char(location.range.start);
+        let mut ident = String::new();
+        for i in doc.to_char(location.range.start)..doc.to_char(location.range.end) {
+            ident.push(doc.char(i));
+        }
+        return Some(ident);
     }
 
     pub fn code_action(&self, action_params: CodeActionParams) -> Option<JinjaCodeAction> {

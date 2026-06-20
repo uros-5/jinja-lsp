@@ -28,8 +28,8 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.3",
-    "ava": "^6.0.1"
+    "@napi-rs/cli": "^3.7.2",
+    "ava": "^8.0.1"
   },
   "ava": {
     "timeout": "3m"
@@ -46,7 +46,7 @@
     "universal": "napi universal",
     "version": "napi version"
   },
-  "packageManager": "yarn@4.2.2",
+  "packageManager": "pnpm@9.3.0",
   "repository": "https://github.com/uros-5/jinja-lsp",
   "description": "Bindings for jinja-lsp"
 }

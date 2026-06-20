@@ -79,20 +79,16 @@
     "test-compile": "tsc -p ./",
     "compile": "tsc -b",
     "watch": "tsc -b -w",
-    "lint": "eslint ./client/src --ext .ts,.tsx",
     "test": "sh ./scripts/e2e.sh",
     "test2": "vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
     "@types/node": "^18.14.6",
-    "@typescript-eslint/eslint-plugin": "^7.1.0",
-    "@typescript-eslint/parser": "^7.1.0",
-    "@vscode/test-cli": "^0.0.9",
+    "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.3.9",
     "esbuild": "^0.25.5",
-    "eslint": "^8.57.0",
-    "mocha": "^10.8.2",
+    "mocha": "^11.7.6",
     "typescript": "5.3.3"
   }
 }

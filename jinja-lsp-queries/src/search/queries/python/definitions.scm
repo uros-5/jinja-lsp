@@ -34,8 +34,21 @@
                 )
             )
         )
+
+        (call
+            function: (identifier) @method
+            arguments: (argument_list
+            	(dictionary
+                  (pair
+                    key: (string
+                      (string_content) @key_id
+                    )
+                  )
+                )
+            )
+        )        
     ]
-    (#match? @method "^(render_template|render)$")
+    (#match? @method "^(render_template|render|render_async)$")
   
 )
 

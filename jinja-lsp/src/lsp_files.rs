@@ -940,7 +940,7 @@ impl LspFiles {
             .iter()
             .filter(|variable| variable.identifier_type != IdentifierType::TemplateBlock)
             .filter(|variable| {
-                let bigger = hover.start >= variable.end;
+                let bigger = hover.start >= variable.start;
                 let in_scope = hover.start <= variable.scope_ends.1;
                 let same_name = hover.name == variable.name;
                 bigger && in_scope && same_name

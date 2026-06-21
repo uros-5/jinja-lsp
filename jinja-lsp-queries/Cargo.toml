@@ -1,6 +1,6 @@
 [package]
 name = "jinja-lsp-queries"
-version = "0.1.92"
+version = "0.2.0"
 edition = "2021"
 description = "TreeSitter queries for jinja-lsp"
 license = "MIT"

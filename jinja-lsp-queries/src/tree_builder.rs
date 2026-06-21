@@ -13,6 +13,7 @@ pub enum JinjaDiagnostic {
     Undefined,
     DefinedInMultiplePlaces,
     TemplateNotFound,
+    CreateNewTemplate,
 }
 
 impl JinjaDiagnostic {
@@ -21,6 +22,7 @@ impl JinjaDiagnostic {
             JinjaDiagnostic::Undefined => DiagnosticSeverity::WARNING,
             JinjaDiagnostic::TemplateNotFound => DiagnosticSeverity::ERROR,
             JinjaDiagnostic::DefinedInMultiplePlaces => DiagnosticSeverity::INFORMATION,
+            JinjaDiagnostic::CreateNewTemplate => DiagnosticSeverity::HINT,
         }
     }
 }
@@ -31,6 +33,9 @@ impl Display for JinjaDiagnostic {
             JinjaDiagnostic::Undefined => f.write_str("Undefined variable"),
             JinjaDiagnostic::TemplateNotFound => f.write_str("Template not found"),
             JinjaDiagnostic::DefinedInMultiplePlaces => f.write_str("Defined in multiple places."),
+            JinjaDiagnostic::CreateNewTemplate => {
+                f.write_str("Create new template with code actions.")
+            }
         }
     }
 }

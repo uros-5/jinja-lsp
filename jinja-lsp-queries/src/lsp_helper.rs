@@ -103,6 +103,7 @@ pub fn search_errors(
                         if err.kind() == ErrorKind::NotFound {
                             let diagnostic = (err_type, i.to_owned());
                             diagnostics.push(diagnostic);
+                            diagnostics.push((JinjaDiagnostic::CreateNewTemplate, i.to_owned()))
                         }
                     }
                 }

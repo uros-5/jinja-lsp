@@ -4,7 +4,7 @@
       	(identifier) @method_name
       )
       (identifier) @method_name
-      (#any-of? @method_name "render_jinja" "get_template")
+      (#any-of? @method_name "render_jinja" "get_template" "render_template")
     ]
     (argument_list
       (string)+ @template_name

@@ -2,8 +2,10 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 from fastapi.templating import Jinja2Templates
 from fastapi import FastAPI, Request
+from flask import Flask, render_template
 
 app = FastAPI()
+flask_app = Flask(__name__)
 
 def main():
     jinja_env = Environment(loader=FileSystemLoader("templates"))
@@ -26,3 +28,8 @@ async def fastapi_example(request: Request):
     template = templates.TemplateResponse(request, name="account.jinja", context={"example": 11})
     # _response = template.render()
 
+
+
+@flask_app.route("/example2")
+async def example2():
+    return render_template("account.jinja", var=123)

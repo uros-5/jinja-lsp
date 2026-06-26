@@ -5,8 +5,8 @@ use tree_sitter::{Point, Tree};
 
 use crate::{
     search::{
-        objects::objects_query, queries::Queries, templates::templates_query, Identifier,
-        IdentifierType,
+        Identifier, IdentifierType, objects::objects_query, queries::Queries,
+        templates::templates_query,
     },
     tree_builder::{JinjaDiagnostic, LangType},
 };
@@ -28,7 +28,7 @@ pub fn search_errors(
             let trigger_point = Point::new(0, 0);
             let query = &queries.jinja_objects;
             let objects = objects_query(query, root, trigger_point, source, true);
-            let objects1 = objects.show();
+            let objects1 = objects.objects;
             let this_file = variables.get(file_name)?;
             for object in objects1 {
                 if object.is_filter || object.is_test {

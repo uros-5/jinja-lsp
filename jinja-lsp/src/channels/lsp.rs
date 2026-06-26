@@ -1,10 +1,11 @@
 use jinja_lsp_queries::search::{
-    objects::CompletionType, snippets_completion::snippets, Identifier,
+    Identifier, objects::CompletionType, snippets_completion::snippets, to_range,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use tower_lsp::{
+    Client,
     lsp_types::{
         CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CompletionItem,
         CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
@@ -17,11 +18,10 @@ use tower_lsp::{
         ServerInfo, TextDocumentIdentifier, TextDocumentSyncCapability, TextDocumentSyncKind,
         TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit,
     },
-    Client,
 };
 
 use crate::{
-    config::{new_template_extensions, search_config, walkdir, JinjaConfig, OptionalJinjaConfig},
+    config::{JinjaConfig, OptionalJinjaConfig, new_template_extensions, search_config, walkdir},
     filter::{add_custom_filter_completions, init_filter_completions},
     lsp_files::LspFiles,
     template_tests::init_template_test_completions,
@@ -167,7 +167,7 @@ pub fn lsp_task(
                         continue;
                     };
 
-                    match completion.0 {
+                    match completion {
                         CompletionType::Filter => {
                             let completions = filters.clone();
                             let mut ret = Vec::with_capacity(completions.len());
@@ -228,6 +228,7 @@ pub fn lsp_task(
                                 })) = snippet.text_edit
                                 {
                                     if !lsp_data.is_vscode {
+                                        let range = to_range(range);
                                         snippet.text_edit =
                                             Some(CompletionTextEdit::InsertAndReplace(
                                                 InsertReplaceEdit {
@@ -248,6 +249,7 @@ pub fn lsp_task(
                             }
                         }
                         CompletionType::IncompleteIdentifier { name, range } => {
+                            let range = to_range(range);
                             if let Some(variables) =
                                 lsp_data.read_variables(&uri, position, Some((name, range)), None)
                             {

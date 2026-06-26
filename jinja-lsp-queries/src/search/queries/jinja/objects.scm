@@ -10,10 +10,15 @@
         )
 
         (
-          (operator) @pipe
+          (filter_operator) @filter
         )
 
-        (expression) @expr
+        (expression_begin) @expr_start
+        (expression_end) @expr_end
+
+        (statement_begin) @statement_start
+        (statement_end) @statement_end
+
 
         (
           (keyword) @is

@@ -3,6 +3,7 @@ use tree_sitter::Query;
 #[derive(Debug)]
 pub struct Queries {
     pub jinja_definitions: Query,
+    // pub jinja_scope: Query,
     pub jinja_objects: Query,
     pub jinja_imports: Query,
     pub backend_definitions: Query,

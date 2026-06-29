@@ -3,17 +3,18 @@
 use std::collections::HashMap;
 
 use jinja_lsp::{
-  filter::{init_filter_completions, FilterCompletion},
+  filter::{FilterCompletion, init_filter_completions},
   lsp_files::LspFiles,
 };
 use jinja_lsp_queries::{
   parsers::Parsers,
   search::{
-    objects::{objects_query, CompletionType, JinjaObject},
+    Identifier, IdentifierType,
+    objects::{CompletionType, JinjaObject, objects_query},
     python_identifiers::PythonIdentifier,
     queries::Queries,
     snippets_completion::snippets,
-    Identifier, IdentifierType,
+    to_range,
   },
   to_input_edit::to_position2,
 };
@@ -41,7 +42,7 @@ pub fn basic(content: String) -> Option<i32> {
   )?;
   let query = &queries.jinja_objects;
   let objects = objects_query(query, &tree, Point::new(0, 0), &content, true);
-  let count = objects.show();
+  let count = objects.objects;
   Some(count.len() as i32)
 }
 
@@ -367,7 +368,7 @@ impl NodejsLspFiles {
     let completion = self.lsp_files.completion(params)?;
     let mut items = None;
 
-    match completion.0 {
+    match completion {
       CompletionType::Filter => {
         let completions = self.filters.clone();
         let mut ret = Vec::with_capacity(completions.len());
@@ -442,12 +443,13 @@ impl NodejsLspFiles {
         // }
       }
       CompletionType::IncompleteIdentifier { name, mut range } => {
-        range.start.line += line;
-        range.end.line += line;
+        range.0.row += line as usize;
+        range.1.row += line as usize;
         let url = &original_uri.to_string();
         let mut ret = vec![];
         let variables = self.lsp_files.get_variable(name, url.to_string(), "temp")?;
         for variable in variables {
+          let range = to_range(range);
           let item = JsCompletionItem {
             completion_type: JsCompletionType::Identifier,
             label: variable.to_string(),

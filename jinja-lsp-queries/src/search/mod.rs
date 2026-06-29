@@ -1,7 +1,7 @@
 use tower_lsp::lsp_types::{CompletionItemKind, Position, Range, SymbolKind};
 use tree_sitter::Point;
 
-use self::objects::JinjaObject;
+use crate::search::objects::JinjaObject;
 
 pub mod definition;
 pub mod objects;

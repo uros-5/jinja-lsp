@@ -1,16 +1,21 @@
+use jinja_lsp_queries::search::Identifier;
+use jinja_lsp_queries::search::IdentifierType;
+use jinja_lsp_queries::search::definition::ScopeError;
+use jinja_lsp_queries::search::definition::definition_query;
+use jinja_lsp_queries::search::objects::CompletionType;
+use jinja_lsp_queries::search::objects::JinjaObject;
+use jinja_lsp_queries::search::objects::objects_query;
 use jinja_lsp_queries::{
     lsp_helper::{path_items, search_errors},
     search::{
         completion_start,
-        definition::definition_query,
-        objects::{objects_query, JinjaObject},
-        python_identifiers::{python_identifiers, PythonIdentifier},
+        python_identifiers::{PythonIdentifier, python_identifiers},
         queries::Queries,
         rust_identifiers::backend_definition_query,
         rust_template_completion::backend_templates_query,
         snippets_completion::snippets_query,
         templates::templates_query,
-        to_point, to_range, Identifier, IdentifierType,
+        to_point, to_range,
     },
     to_input_edit::remove_unicode_content,
     tree_builder::{JinjaDiagnostic, LangType},
@@ -32,8 +37,7 @@ use tower_lsp::lsp_types::{
 
 use jinja_lsp_queries::{
     parsers::Parsers,
-    search::objects::CompletionType,
-    to_input_edit::{to_position2, ToInputEdit},
+    to_input_edit::{ToInputEdit, to_position2},
 };
 use ropey::Rope;
 
@@ -58,6 +62,7 @@ pub struct LspFiles {
     pub diagnostics_task: Option<JoinHandle<()>>,
     pub main_channel: Option<mpsc::Sender<LspMessage>>,
     pub variables: HashMap<String, Vec<Identifier>>,
+    pub scope_errors: HashMap<String, Vec<ScopeError>>,
     pub code_actions: HashMap<String, Vec<Identifier>>,
     pub is_vscode: bool,
     pub ignore_globals: bool,
@@ -116,12 +121,14 @@ impl LspFiles {
                     return None;
                 }
                 let query_defs = &self.queries.jinja_definitions;
-                let mut definitions =
-                    definition_query(query_defs, tree, trigger_point, file_content, true)
-                        .identifiers();
+                let definitions =
+                    definition_query(query_defs, tree, trigger_point, file_content, true);
+                let scope_errors = definitions.errors.clone();
+                let mut definitions = definitions.collect();
                 variables.append(&mut definitions);
                 self.variables.insert(String::from(name), variables);
                 self.code_actions.insert(String::from(name), vec![]);
+                self.scope_errors.insert(String::from(name), scope_errors);
             }
         }
         Some(())
@@ -243,7 +250,20 @@ impl LspFiles {
         self.add_variables(uri, lang_type, &content.content);
         let mut hm = HashMap::new();
         let v = self.read_tree(uri);
-        if let Some(v) = v {
+        if let Some(mut v) = v {
+            let scope_errors = self
+                .scope_errors
+                .get(&uri.to_string())
+                .map(|i| {
+                    let mut errors = vec![];
+                    for error in i {
+                        errors.push(error.diagnostic());
+                    }
+                    errors
+                })
+                .unwrap_or(vec![]);
+            v.extend(scope_errors);
+
             hm.insert(uri.to_owned(), v);
         } else {
             hm.insert(uri.to_owned(), vec![]);
@@ -252,7 +272,7 @@ impl LspFiles {
         Some(message)
     }
 
-    pub fn completion(&self, params: CompletionParams) -> Option<(CompletionType, bool)> {
+    pub fn completion(&self, params: CompletionParams) -> Option<CompletionType> {
         let can_complete = {
             matches!(
                 params.context,
@@ -285,11 +305,15 @@ impl LspFiles {
                 let query = &self.queries.jinja_snippets;
                 let snippets = snippets_query(query, tree, point, &writter.content, false);
                 if snippets.to_complete(point).is_some() {
-                    let start = to_position2(point);
-                    let mut end = to_position2(point);
-                    end.character += 1;
-                    let range = Range::new(start, end);
-                    return Some((CompletionType::Snippets { range }, false));
+                    // let start = to_position2(point);
+                    // let mut end = to_position2(point);
+                    let start = point;
+                    let mut end = point;
+                    end.column += 1;
+                    // let range = Range::new(start, end);
+                    return Some(CompletionType::Snippets {
+                        range: (start, end),
+                    });
                 }
                 let query = &self.queries.jinja_objects;
                 let objects = objects_query(query, tree, point, &writter.content, false);
@@ -300,14 +324,11 @@ impl LspFiles {
                 let query = templates_query(query, tree, point, &writter.content, false);
                 let identifier = query.in_template(point)?.get_identifier(point)?;
                 let start = completion_start(point, identifier)?;
-                let range = to_range((identifier.start, identifier.end));
-                Some((
-                    CompletionType::IncludedTemplate {
-                        name: start.to_owned(),
-                        range,
-                    },
-                    false,
-                ))
+                let range = (identifier.start, identifier.end);
+                Some(CompletionType::IncludedTemplate {
+                    name: start.to_owned(),
+                    range,
+                })
             }
             LangType::Backend => {
                 let rust_templates = backend_templates_query(
@@ -319,14 +340,11 @@ impl LspFiles {
                 );
                 let identifier = rust_templates.in_template(point)?;
                 let start = completion_start(point, identifier)?;
-                let range = to_range((identifier.start, identifier.end));
-                Some((
-                    CompletionType::IncludedTemplate {
-                        name: start.to_owned(),
-                        range,
-                    },
-                    false,
-                ))
+                let range = (identifier.start, identifier.end);
+                Some(CompletionType::IncludedTemplate {
+                    name: start.to_owned(),
+                    range,
+                })
             }
         }
     }
@@ -365,7 +383,7 @@ impl LspFiles {
         let _ = doc.write_to(&mut writter);
         let objects = objects_query(query, tree, trigger_point, &writter.content, false);
         if objects.is_hover(trigger_point) {
-            let object = objects.get_last_id()?;
+            let object = objects.objects.last()?;
             if object.is_filter {
                 return Some((Identifier::from(object), CompletionType::Filter));
             } else if object.is_test {
@@ -374,9 +392,6 @@ impl LspFiles {
                 return Some((Identifier::from(object), CompletionType::Identifier));
             }
         }
-        // else if objects.is_ident(point) {
-
-        // }
         None
     }
 
@@ -542,7 +557,7 @@ impl LspFiles {
             let objects = objects_query(query, tree, Point::default(), &writter.content, true);
             let same_document = doc == &definition_location.uri.to_string();
 
-            for object in objects.show() {
+            for object in objects.objects {
                 if object.name == ident {
                     if same_document {
                         if object.location().1 < location.1 {
@@ -590,11 +605,12 @@ impl LspFiles {
                 if let Some(code_action) = code_action {
                     return Some(JinjaCodeAction::CreateTemplate(code_action.name.to_owned()));
                 }
-                let objects = objects_query(query, tree, point, &writter.content, false);
-                if objects.in_expr(point) {
-                    return Some(JinjaCodeAction::Reset);
-                }
+                let _objects = objects_query(query, tree, point, &writter.content, false);
                 None
+                // if objects.in_expr(point) {
+                //     return Some(JinjaCodeAction::Reset);
+                // }
+                // None
             }
             LangType::Backend => {
                 let code_action = code_actions
@@ -790,11 +806,12 @@ impl LspFiles {
     pub fn read_templates(
         &self,
         mut prefix: String,
-        range: Range,
+        range: (Point, Point),
         start_point: Position,
         _: Option<String>,
     ) -> Option<Vec<CompletionItem>> {
         let all_templates = self.trees.get(&LangType::Template)?;
+        let range = to_range(range);
         if prefix.is_empty() {
             prefix = String::from("file:///");
         }
@@ -913,7 +930,7 @@ impl LspFiles {
             &writter.content,
             true,
         );
-        let objects = objects.show();
+        let objects = objects.objects;
         Some(objects)
     }
 
@@ -1027,6 +1044,7 @@ impl Default for LspFiles {
             is_vscode: false,
             code_actions: HashMap::default(),
             ignore_globals: false,
+            scope_errors: HashMap::default(),
         }
     }
 }
@@ -1042,6 +1060,7 @@ impl Clone for LspFiles {
         let is_vscode = self.is_vscode;
         let code_actions = self.code_actions.clone();
         let config = self.config.clone();
+        let scope_errors = self.scope_errors.clone();
         let task = None;
         Self {
             trees,
@@ -1055,6 +1074,7 @@ impl Clone for LspFiles {
             is_vscode,
             diagnostics_task: task,
             ignore_globals: self.ignore_globals,
+            scope_errors,
         }
     }
 }

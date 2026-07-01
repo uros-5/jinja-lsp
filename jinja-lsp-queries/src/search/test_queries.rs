@@ -2,9 +2,9 @@
 mod query_tests {
     use crate::{
         search::{
+            definition::definition_query,
             objects::{CompletionType, objects_query},
             python_identifiers::python_identifiers,
-            definition::definition_query,
             snippets_completion::snippets_query,
         },
         to_input_edit::remove_unicode_content,

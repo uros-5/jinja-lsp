@@ -155,7 +155,7 @@ impl JinjaDefinitions {
                     self.new_scope("set".to_string(), last.end_position());
                 }
             }
-            "with_statement" => {
+            "with_definition" => {
                 if self.statements.contains(&capture.node.id()) {
                     return Some(true);
                 }
@@ -232,7 +232,7 @@ impl JinjaDefinitions {
                     return Some(true);
                 }
                 self.statements.insert(capture.node.id());
-                let mut end_scope = false;
+                let mut end_if_scope = false;
                 if self.last_keyword == "elif" || self.last_keyword == "else" {
                     let parent_scope_check = self
                         .current_scope
@@ -251,10 +251,10 @@ impl JinjaDefinitions {
                             self.errors.push(ScopeError::ElseStatement(scope));
                         }
                     } else {
-                        end_scope = true;
+                        end_if_scope = true;
                     }
                 }
-                if end_scope {
+                if end_if_scope {
                     let mut scope = self.current_scope.pop_front()?;
                     scope.end = capture.node.start_position();
                     let definitions = self.definitions.get_mut(&scope.id)?;
